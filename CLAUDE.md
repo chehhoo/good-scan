@@ -9,14 +9,14 @@ Volunteers use this app on their personal phones (added to Home Screen as a PWA)
 - Look up attendee **meal status** (how many meals ordered / taken)
 - View real-time **meal inventory counts** per venue
 
-This repo contains **both** the backend API and the React frontend. The backend reads from the same shared `cccc` MariaDB/MySQL database as `good-camp`.
+This repo contains **both** the backend API and the React frontend. The backend reads from the same shared `good` MariaDB/MySQL database as `good-api`.
 
 ---
 
 ## Ecosystem Context
 
 ```
-good-camp/          ← Backend API + Admin UI  (platform core)
+good-api/          ← Backend API + Admin UI  (platform core)
 good-conference/    ← Attendee portal
 good-register/      ← Public registration page  (planned)
 good-scan/          ← THIS REPO  (volunteer scan app)
@@ -85,7 +85,7 @@ Phone browser
       ├── /q/swagger-ui → OpenAPI docs
       └── /*            → Quinoa serves React PWA static assets
 
-Quarkus ← MariaDB/MySQL (shared cccc database, same as good-camp)
+Quarkus ← MariaDB/MySQL (shared good database, same as good-api)
 ```
 
 In dev mode, Quinoa proxies to the Vite dev server on `:5173`. In prod, the built React assets are served directly by Quarkus from the JAR.
@@ -203,7 +203,7 @@ src/
 
 ### Key Conventions
 
-- **Backend:** Panache repositories, RESTEasy Reactive, Lombok — same conventions as `meal-api-quarkus`.
+- **Backend:** Panache repositories, RESTEasy Reactive, Lombok.
 - **Frontend:** React + Vite + Tailwind CSS. API calls via `src/api/client.ts` only — never call axios directly from pages.
 - **UI language:** Chinese first, English second (e.g., `餐食 Meal`).
 - **Styling:** Dark blue theme (`bg-blue-950`) designed for outdoor/venue readability.
@@ -236,5 +236,5 @@ Before each conference year:
 ```
 DB_USERNAME=...
 DB_PASSWORD=...
-DB_URL=jdbc:mysql://rds-host:3306/cccc
+DB_URL=jdbc:mysql://rds-host:3306/good
 ```

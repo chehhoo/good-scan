@@ -4,7 +4,7 @@ services:
     container_name: good-scan-db
     environment:
       MARIADB_ROOT_PASSWORD: my-secret-pw
-      MARIADB_DATABASE: cccc
+      MARIADB_DATABASE: good
       MARIADB_USER: cccmdev
       MARIADB_PASSWORD: my-secret-pw
     ports:
