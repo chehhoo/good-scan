@@ -12,44 +12,10 @@ api.interceptors.request.use((config) => {
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export interface PickUpRecord {
-  personId: number
-  pickUpDate: string | null
-  name: string
-  locationId: number
-}
-
-export interface MealPlan {
-  mealId: number
-  mealOrdered: number
-  mealTaken: number
-  mealRemaining: number
-  description: string
-  locationId: number
-  pickUpRecord: PickUpRecord[]
-}
-
 export interface ScanRequest {
   uid: string
   mealId: number
   scannedAt: string
-}
-
-export interface ScanResponse {
-  mealId: number
-  mealOrdered: number
-  mealTaken: number
-  mealRemaining: number
-  mealStatus: number   // 0 = success, 1 = quota exceeded
-  mealCount: number
-  householdId: number
-  pickUpRecord: PickUpRecord[]
-  mealPlans: MealPlan[]
-}
-
-export interface StatusResponse {
-  householdId: number
-  mealPlans: MealPlan[]
 }
 
 export interface Venue {
@@ -81,19 +47,15 @@ export const eventApi = {
 // ── Sync API (bulk cache population from good-api) ─────────────────────────
 
 export const syncApi = {
-  // Fetch all profiles for the current event — for IndexedDB cache
   profiles: () =>
     api.get<CachedProfile[]>('/scan/sync/profiles'),
 
-  // Fetch all meals for the current event
   meals: () =>
     api.get<CachedMeal[]>('/scan/sync/meals'),
 
-  // Fetch all register-meal mappings (household → meal orders)
   registerMeals: () =>
     api.get<CachedRegisterMeal[]>('/scan/sync/register-meals'),
 
-  // Flush a batch of queued scans to good-api
   flushScans: (scans: ScanRequest[]) =>
     api.post<{ accepted: number[] }>('/scan/sync/flush', scans),
 }
@@ -102,10 +64,7 @@ export const syncApi = {
 
 export const scanApi = {
   scan: (uid: string, mealId: number) =>
-    api.post<ScanResponse>('/meal/scan', { id: uid, mealId }),
-
-  statusByUid: (uid: string) =>
-    api.get<StatusResponse>(`/meal/status/${uid}`),
+    api.post<void>('/meal/scan', { id: uid, mealId }),
 
   venues: () =>
     api.get<Venue[]>('/meal/venues'),

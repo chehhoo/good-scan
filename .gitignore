@@ -1,12 +1,7 @@
-# Maven / Quarkus
-target/
-.mvn/
-*.class
-
-# Node / frontend
-src/main/webui/node_modules/
-src/main/webui/dist/
-src/main/webui/.vite/
+# Node
+node_modules/
+dist/
+.vite/
 
 # IDE
 .idea/
