@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import MealScan from './pages/MealScan'
 import CheckIn from './pages/CheckIn'
 import MealInfo from './pages/MealInfo'
+import LoginPage from './pages/LoginPage'
 import StatusDot from './components/StatusDot'
 import { db, markSynced, getPendingScans, getLastSyncTime } from './db/localDb'
 import { syncApi, eventApi, type ActiveEvent } from './api/client'
@@ -9,6 +10,7 @@ import { syncApi, eventApi, type ActiveEvent } from './api/client'
 type Tab = 'meal' | 'checkin' | 'info'
 
 export default function App() {
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'))
   const [tab, setTab] = useState<Tab>('meal')
   const [online, setOnline] = useState(navigator.onLine)
   const [pendingCount, setPendingCount] = useState(0)
@@ -88,6 +90,10 @@ export default function App() {
     } catch {
       // Will retry on next interval
     }
+  }
+
+  if (!token) {
+    return <LoginPage onLogin={setToken} />
   }
 
   return (
