@@ -75,7 +75,7 @@ export default function App() {
     if (pending.length === 0) return
     try {
       const res = await syncApi.flushScans(
-        pending.map((s) => ({ uid: s.uid, mealId: s.mealId, scannedAt: s.scannedAt }))
+        pending.map((s) => ({ localId: s.id!, uid: s.uid, mealId: s.mealId, scannedAt: s.scannedAt }))
       )
       const accepted = res.data.accepted
       await Promise.all(

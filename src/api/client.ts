@@ -13,6 +13,7 @@ api.interceptors.request.use((config) => {
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export interface ScanRequest {
+  localId: number
   uid: string
   mealId: number
   scannedAt: string
