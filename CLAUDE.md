@@ -95,7 +95,7 @@ Phone browser
                    → MariaDB :3306/good
 ```
 
-In dev, Vite proxies `/api` to `http://localhost:8090`. In prod, nginx routes `/api` to good-api.
+In dev, `VITE_GOOD_API_URL` is undefined → `baseURL` is `'/api'` → Vite proxy routes to `http://localhost:8090`. In prod (CloudFront), `VITE_GOOD_API_URL=https://api.goodvessel.org` → `baseURL` is `https://api.goodvessel.org/api` — absolute URL, no proxy needed.
 
 ### Offline-First Data Flow
 
@@ -155,6 +155,7 @@ Volunteers open `scan.goodvessel.org` in Chrome on their phone and tap **"Add to
 src/
 ├── api/
 │   └── client.ts          Axios instance + JWT interceptor + all TypeScript types
+│                          authApi  — POST /auth/volunteer (volunteer login)
 │                          scanApi  — direct scan/lookup calls (online only)
 │                          syncApi  — bulk profile/meal/flush calls for IndexedDB warm-up
 ├── components/
@@ -169,10 +170,11 @@ src/
 │                          getPendingScans() — get unsynced queue items
 │                          getLastSyncTime() — last successful sync timestamp
 ├── pages/
+│   ├── LoginPage.tsx      Shown when no JWT in localStorage; access code input + QR magic link
 │   ├── MealScan.tsx       Tab 1: QR scan → meal pickup result (offline-first)
 │   ├── CheckIn.tsx        Tab 2: QR scan → meal status lookup (offline-first)
 │   └── MealInfo.tsx       Tab 3: Venue pickup counts (requires network)
-├── App.tsx                Root: header + tab bar + warmUpCache on mount + flush every 10s
+├── App.tsx                Root: login gate → header + tab bar + warmUpCache + flush every 10s
 └── main.tsx
 index.html
 vite.config.ts             PWA manifest + Workbox runtimeCaching + BackgroundSync + /api proxy
@@ -186,24 +188,25 @@ package.json               key deps: react 18, dexie 4, @zxing/library, vite-plu
 - **Offline writes:** `queueScan()` first, then attempt `scanApi.scan()` in background; never block the UI on the network.
 - **UI language:** Chinese first, English second (e.g., `餐食 Meal`, `订了 Order`).
 - **Styling:** Dark blue theme (`bg-blue-950`). Large touch targets for noisy venue use.
-- **Auth:** JWT stored in `localStorage`. Axios interceptor in `client.ts` attaches `Authorization: Bearer` to every request. No volunteer login page yet.
+- **Auth:** JWT stored in `localStorage`. Axios interceptor in `client.ts` attaches `Authorization: Bearer` to every request. Volunteers log in via `LoginPage.tsx` using an event access code set by the admin in good-api. Token subject is `volunteer:{eventId}` and expires after 7 days. If no token in localStorage, `App.tsx` renders `LoginPage` instead of the main UI. Auto-login supported via `?code=` query param (QR / magic link).
 - **ResultBanner** is used only in `CheckIn.tsx`. `MealScan.tsx` renders its own inline result UI (see MealScan Result UI section).
 
 ### good-api Endpoints Used (all under `/api`)
 
-The `/scan/sync/*` endpoints **do not yet exist in good-api** — they must be implemented there before good-scan can populate its cache.
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/auth/volunteer` | Public | Exchange event access code for a 7-day volunteer JWT |
+| GET | `/scan/sync/profiles` | JWT | All attendee profiles for active event |
+| GET | `/scan/sync/meals` | JWT | All meals for active event |
+| GET | `/scan/sync/register-meals` | JWT | All household meal orders (entitlements) |
+| POST | `/scan/sync/flush` | JWT | Bulk flush queued scans; body: `[{localId, uid, mealId, scannedAt}]`; returns `{accepted: number[]}` |
+| POST | `/meal/scan` | JWT | Record single meal pickup (real-time, online-only path) |
+| GET | `/meal/status/{uid}` | JWT | All meal plans for a badge UID |
+| GET | `/meal/info/{location}` | JWT | Meal list for a venue (used by MealInfo tab) |
+| GET | `/meal/count/{mealId}` | JWT | Pickup count for a specific meal |
+| GET | `/meal/venues` | JWT | List available venues |
 
-| Method | Path | Status | Description |
-|--------|------|--------|-------------|
-| GET | `/scan/sync/profiles` | **TODO in good-api** | All attendee profiles for current event |
-| GET | `/scan/sync/meals` | **TODO in good-api** | All meals for current event |
-| GET | `/scan/sync/register-meals` | **TODO in good-api** | All household meal orders |
-| POST | `/scan/sync/flush` | **TODO in good-api** | Bulk flush queued scan records; returns `{ accepted: number[] }` |
-| POST | `/meal/scan` | Exists | Record single meal pickup |
-| GET | `/meal/status/{uid}` | Exists | All meal plans for a badge UID |
-| GET | `/meal/info/{location}` | Exists | Meal list for a venue (used by MealInfo tab) |
-| GET | `/meal/count/{mealId}` | Exists | Pickup count for a specific meal |
-| GET | `/meal/venues` | Exists | List available venues |
+**Flush `localId` design:** each `ScanQueueItem` has an auto-increment `id` in IndexedDB. The flush request includes `localId: s.id` so the server can echo it back in `accepted[]`. The client then filters `pending.filter(s => accepted.includes(s.id!))` to mark only accepted entries as synced. Items rejected (quota exceeded, no entitlement) remain `synced: false` and retry on the next 10s interval.
 
 ---
 
