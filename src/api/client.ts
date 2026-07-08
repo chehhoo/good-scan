@@ -13,6 +13,7 @@ api.interceptors.request.use((config) => {
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export interface ScanRequest {
+  localId: number
   uid: string
   mealId: number
   scannedAt: string
@@ -42,6 +43,13 @@ export interface ActiveEvent {
 
 export const eventApi = {
   getActive: () => api.get<ActiveEvent>('/register/event-info').then(r => r.data),
+}
+
+// ── Auth API ───────────────────────────────────────────────────────────────
+
+export const authApi = {
+  volunteerLogin: (code: string) =>
+    api.post<{ token: string; eventId: number; eventName: string }>('/auth/volunteer', { code }),
 }
 
 // ── Sync API (bulk cache population from good-api) ─────────────────────────
