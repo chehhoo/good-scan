@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import QrScanner from '../components/QrScanner'
 import { db, lookupByUid, queueScan, type CachedMeal, type CachedRegisterMeal } from '../db/localDb'
 import { scanApi } from '../api/client'
@@ -38,6 +38,8 @@ export default function MealScan() {
   const [meals, setMeals] = useState<CachedMeal[]>([])
   const [selectedMealId, setSelectedMealId] = useState<number | undefined>(undefined)
   const [loading, setLoading] = useState(false)
+  const [manualUid, setManualUid] = useState('')
+  const manualInputRef = useRef<HTMLInputElement>(null)
 
   // Load today's meals for the selector
   useEffect(() => {
@@ -138,9 +140,18 @@ export default function MealScan() {
     }
   }, [loading, selectedMealId])
 
+  const submitManualUid = useCallback(() => {
+    const uid = manualUid.trim()
+    if (!uid) return
+    setManualUid('')
+    handleScan(uid)
+  }, [manualUid, handleScan])
+
   const reset = () => {
     setResult(null)
     setScanning(true)
+    setManualUid('')
+    setTimeout(() => manualInputRef.current?.focus(), 100)
   }
 
   return (
@@ -163,8 +174,27 @@ export default function MealScan() {
 
       {/* Camera scanner */}
       {scanning && !loading && (
-        <div className="flex-1">
+        <div className="flex-1 flex flex-col">
           <QrScanner onScan={handleScan} active={scanning} />
+          {/* Manual UID entry */}
+          <div className="p-3 border-t border-blue-800 flex gap-2">
+            <input
+              ref={manualInputRef}
+              type="text"
+              className="flex-1 bg-blue-900 border border-blue-700 rounded-lg px-3 py-2 text-sm font-mono placeholder-blue-500 focus:outline-none focus:border-blue-400"
+              placeholder="手动输入 Person ID"
+              value={manualUid}
+              onChange={(e) => setManualUid(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && submitManualUid()}
+            />
+            <button
+              onClick={submitManualUid}
+              disabled={!manualUid.trim()}
+              className="px-4 py-2 bg-blue-700 hover:bg-blue-600 active:bg-blue-800 disabled:opacity-40 rounded-lg text-sm font-semibold transition-colors"
+            >
+              查询 Go
+            </button>
+          </div>
         </div>
       )}
 

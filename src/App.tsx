@@ -106,6 +106,8 @@ export default function App() {
             <span className="text-[10px] text-blue-300 font-medium tracking-widest uppercase">Good Vessel · 好器皿</span>
             <span className="text-sm font-bold tracking-wide">
               {activeEvent ? `${activeEvent.name}${activeEvent.nameEng ? ` ${activeEvent.nameEng}` : ''}` : 'Scan'}
+              {' '}
+              <span className="text-[10px] text-blue-400 font-normal">v{__APP_VERSION__}</span>
             </span>
           </div>
         </div>
