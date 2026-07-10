@@ -32,7 +32,7 @@ interface ScanResult {
   mealPlans: MealPlanRow[]
 }
 
-export default function MealScan() {
+export default function MealScan({ manualEntryEnabled }: { manualEntryEnabled: boolean }) {
   const [scanning, setScanning] = useState(true)
   const [result, setResult] = useState<ScanResult | null>(null)
   const [meals, setMeals] = useState<CachedMeal[]>([])
@@ -41,11 +41,10 @@ export default function MealScan() {
   const [manualUid, setManualUid] = useState('')
   const manualInputRef = useRef<HTMLInputElement>(null)
 
-  // Load today's meals for the selector
+  // Load all event meals for the selector
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10)
-    db.meals.where('date').equals(today).toArray().then((m) =>
-      setMeals(m.sort((a, b) => a.type - b.type))
+    db.meals.orderBy('date').toArray().then((m) =>
+      setMeals(m.sort((a, b) => a.date.localeCompare(b.date) || a.type - b.type))
     )
   }, [])
 
@@ -157,44 +156,60 @@ export default function MealScan() {
   return (
     <div className="min-h-full flex flex-col">
       {/* Meal selector */}
-      <div className="p-3 border-b border-blue-800">
+      <div className="p-3 border-b border-blue-800 flex gap-2">
         <select
-          className="w-full bg-blue-900 border border-blue-700 rounded-lg px-3 py-2 text-sm"
+          className="flex-1 bg-blue-900 border border-blue-700 rounded-lg px-3 py-2 text-sm"
           value={selectedMealId ?? ''}
           onChange={(e) => setSelectedMealId(e.target.value ? Number(e.target.value) : undefined)}
         >
           <option value="">自动检测 Auto-detect meal</option>
-          {meals.map((m) => (
-            <option key={m.id} value={m.id}>
-              {mealTypeLabel(m.type)} {m.date} {m.startTime.slice(0, 5)}–{m.endTime.slice(0, 5)}
-            </option>
+          {groupByDate(meals).map(({ date, meals: dayMeals }) => (
+            <optgroup key={date} label={formatDate(date)}>
+              {dayMeals.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {mealTypeLabel(m.type)} {m.startTime.slice(0, 5)}–{m.endTime.slice(0, 5)}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
+        {manualEntryEnabled && (
+          <input
+            type="number"
+            min="1"
+            className="w-24 bg-blue-900 border border-yellow-600 rounded-lg px-3 py-2 text-sm font-mono placeholder-blue-500 focus:outline-none focus:border-yellow-400"
+            placeholder="Meal ID"
+            value={selectedMealId ?? ''}
+            onChange={(e) => setSelectedMealId(e.target.value ? Number(e.target.value) : undefined)}
+          />
+        )}
       </div>
 
       {/* Camera scanner */}
       {scanning && !loading && (
         <div className="flex-1 flex flex-col">
           <QrScanner onScan={handleScan} active={scanning} />
-          {/* Manual UID entry */}
-          <div className="p-3 border-t border-blue-800 flex gap-2">
-            <input
-              ref={manualInputRef}
-              type="text"
-              className="flex-1 bg-blue-900 border border-blue-700 rounded-lg px-3 py-2 text-sm font-mono placeholder-blue-500 focus:outline-none focus:border-blue-400"
-              placeholder="手动输入 Person ID"
-              value={manualUid}
-              onChange={(e) => setManualUid(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && submitManualUid()}
-            />
-            <button
-              onClick={submitManualUid}
-              disabled={!manualUid.trim()}
-              className="px-4 py-2 bg-blue-700 hover:bg-blue-600 active:bg-blue-800 disabled:opacity-40 rounded-lg text-sm font-semibold transition-colors"
-            >
-              查询 Go
-            </button>
-          </div>
+          {/* Manual UID entry — hidden unless enabled */}
+          {manualEntryEnabled && (
+            <div className="p-3 border-t border-blue-800 flex gap-2">
+              <input
+                ref={manualInputRef}
+                type="text"
+                className="flex-1 bg-blue-900 border border-blue-700 rounded-lg px-3 py-2 text-sm font-mono placeholder-blue-500 focus:outline-none focus:border-blue-400"
+                placeholder="手动输入 Person ID"
+                value={manualUid}
+                onChange={(e) => setManualUid(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && submitManualUid()}
+              />
+              <button
+                onClick={submitManualUid}
+                disabled={!manualUid.trim()}
+                className="px-4 py-2 bg-blue-700 hover:bg-blue-600 active:bg-blue-800 disabled:opacity-40 rounded-lg text-sm font-semibold transition-colors"
+              >
+                查询 Go
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -343,6 +358,19 @@ function prettyTime(iso: string): string {
   if (diffMin < 1) return '刚刚 just now'
   if (diffMin < 60) return `${diffMin} 分钟前`
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+function groupByDate(meals: CachedMeal[]): { date: string; meals: CachedMeal[] }[] {
+  const map = new Map<string, CachedMeal[]>()
+  for (const m of meals) {
+    if (!map.has(m.date)) map.set(m.date, [])
+    map.get(m.date)!.push(m)
+  }
+  return Array.from(map.entries()).map(([date, meals]) => ({ date, meals }))
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })
 }
 
 function detectCurrentMeal(meals: CachedMeal[]): number | undefined {
