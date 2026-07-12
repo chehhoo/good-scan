@@ -1,5 +1,13 @@
 /// <reference types="vite/client" />
 
+interface ImportMetaEnv {
+  readonly VITE_GOOD_API_URL?: string
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv
+}
+
 declare const __APP_VERSION__: string
 
 // Web Speech API (not yet in lib.dom.d.ts everywhere)
