@@ -32,7 +32,7 @@ interface ScanResult {
   mealPlans: MealPlanRow[]
 }
 
-export default function MealScan({ manualEntryEnabled }: { manualEntryEnabled: boolean }) {
+export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEnabled: boolean; onScan?: (uid: string) => void }) {
   const [scanning, setScanning] = useState(true)
   const [result, setResult] = useState<ScanResult | null>(null)
   const [meals, setMeals] = useState<CachedMeal[]>([])
@@ -40,6 +40,8 @@ export default function MealScan({ manualEntryEnabled }: { manualEntryEnabled: b
   const [loading, setLoading] = useState(false)
   const [manualUid, setManualUid] = useState('')
   const manualInputRef = useRef<HTMLInputElement>(null)
+  const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const [listening, setListening] = useState(false)
 
   // Load all event meals for the selector
   useEffect(() => {
@@ -68,6 +70,7 @@ export default function MealScan({ manualEntryEnabled }: { manualEntryEnabled: b
 
       const { profile, registerMeals, meals: personMeals, takenCounts } = local
       const name = profile.cnName || `${profile.firstName} ${profile.lastName}`
+      onScan?.(uid)
 
       const mealId = selectedMealId ?? detectCurrentMeal(personMeals)
       if (!mealId) {
@@ -117,6 +120,9 @@ export default function MealScan({ manualEntryEnabled }: { manualEntryEnabled: b
         scannedAt: e.scannedAt,
       }))
 
+      // Reflect the just-recorded scan in takenCounts before building the table
+      const updatedTakenCounts = { ...takenCounts, [mealId]: newTaken }
+
       setResult({
         name,
         uid,
@@ -126,7 +132,7 @@ export default function MealScan({ manualEntryEnabled }: { manualEntryEnabled: b
         mealRemaining: Math.max(0, ordered - newTaken),
         status: isExceeded ? 'exceeded' : 'ok',
         trackers,
-        mealPlans: await buildMealPlans(registerMeals, personMeals, takenCounts, uid, name),
+        mealPlans: await buildMealPlans(registerMeals, personMeals, updatedTakenCounts, uid, name),
       })
     } catch (e) {
       setResult({
@@ -138,6 +144,29 @@ export default function MealScan({ manualEntryEnabled }: { manualEntryEnabled: b
       setLoading(false)
     }
   }, [loading, selectedMealId])
+
+  const startVoice = () => {
+    const SpeechRecognition = window.SpeechRecognition ?? (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      alert('此浏览器不支持语音识别 Voice recognition not supported in this browser')
+      return
+    }
+    if (recognitionRef.current) { recognitionRef.current.abort(); recognitionRef.current = null }
+    const rec = new SpeechRecognition()
+    rec.lang = 'zh-CN'
+    rec.interimResults = false
+    rec.maxAlternatives = 1
+    recognitionRef.current = rec
+    setListening(true)
+    rec.onresult = (e) => {
+      const numeric = e.results[0][0].transcript.replace(/\D/g, '')
+      setListening(false)
+      if (numeric) handleScan(numeric)
+    }
+    rec.onerror = () => setListening(false)
+    rec.onend = () => setListening(false)
+    rec.start()
+  }
 
   const submitManualUid = useCallback(() => {
     const uid = manualUid.trim()
@@ -173,16 +202,6 @@ export default function MealScan({ manualEntryEnabled }: { manualEntryEnabled: b
             </optgroup>
           ))}
         </select>
-        {manualEntryEnabled && (
-          <input
-            type="number"
-            min="1"
-            className="w-24 bg-blue-900 border border-yellow-600 rounded-lg px-3 py-2 text-sm font-mono placeholder-blue-500 focus:outline-none focus:border-yellow-400"
-            placeholder="Meal ID"
-            value={selectedMealId ?? ''}
-            onChange={(e) => setSelectedMealId(e.target.value ? Number(e.target.value) : undefined)}
-          />
-        )}
       </div>
 
       {/* Camera scanner */}
@@ -207,6 +226,14 @@ export default function MealScan({ manualEntryEnabled }: { manualEntryEnabled: b
                 className="px-4 py-2 bg-blue-700 hover:bg-blue-600 active:bg-blue-800 disabled:opacity-40 rounded-lg text-sm font-semibold transition-colors"
               >
                 查询 Go
+              </button>
+              <button
+                onClick={startVoice}
+                disabled={listening}
+                title="语音输入 Voice input"
+                className={`px-3 py-2 rounded-lg text-lg transition-colors ${listening ? 'bg-red-600 animate-pulse' : 'bg-blue-700 hover:bg-blue-600 active:bg-blue-800'}`}
+              >
+                🎤
               </button>
             </div>
           )}
@@ -353,11 +380,14 @@ function mealTypeLabel(type: number) {
 
 function prettyTime(iso: string): string {
   const d = new Date(iso)
-  const diffMs = Date.now() - d.getTime()
-  const diffMin = Math.floor(diffMs / 60000)
-  if (diffMin < 1) return '刚刚 just now'
+  const diffMin = Math.floor((Date.now() - d.getTime()) / 60000)
+  if (diffMin < 1)  return '刚刚 just now'
   if (diffMin < 60) return `${diffMin} 分钟前`
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  const hhmm = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+  const today = new Date().toDateString() === d.toDateString()
+  if (today) return `今天 ${hhmm}`
+  const md = d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
+  return `${md} ${hhmm}`
 }
 
 function groupByDate(meals: CachedMeal[]): { date: string; meals: CachedMeal[] }[] {

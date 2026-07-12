@@ -18,6 +18,8 @@ export default function App() {
   const [pendingCount, setPendingCount] = useState(0)
   const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null)
   const [activeEvent, setActiveEvent] = useState<ActiveEvent | null>(null)
+  const [lastScannedUid, setLastScannedUid] = useState<string | null>(null)
+  const [infoRefreshKey, setInfoRefreshKey] = useState(0)
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const cacheIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   // Manual entry: always on in dev; toggle by tapping version badge 5× in prod
@@ -154,7 +156,7 @@ export default function App() {
         {(['meal', 'checkin', 'info'] as Tab[]).map((t) => (
           <button
             key={t}
-            onClick={() => setTab(t)}
+            onClick={() => { setTab(t); if (t === 'info') setInfoRefreshKey((k) => k + 1) }}
             className={`flex-1 py-3 text-sm font-semibold tracking-wide transition-colors ${
               tab === t
                 ? 'text-white border-b-2 border-white'
@@ -170,9 +172,9 @@ export default function App() {
 
       {/* Page content */}
       <main className="flex-1 overflow-y-auto">
-        {tab === 'meal' && <MealScan manualEntryEnabled={manualEntryEnabled} />}
-        {tab === 'checkin' && <CheckIn />}
-        {tab === 'info' && <MealInfo />}
+        {tab === 'meal' && <MealScan manualEntryEnabled={manualEntryEnabled} onScan={setLastScannedUid} />}
+        {tab === 'checkin' && <CheckIn manualEntryEnabled={manualEntryEnabled} />}
+        {tab === 'info' && <MealInfo lastScannedUid={lastScannedUid} refreshKey={infoRefreshKey} />}
       </main>
     </div>
   )
