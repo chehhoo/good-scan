@@ -69,6 +69,11 @@ export const syncApi = {
 
   flushScans: (scans: ScanRequest[]) =>
     api.post<{ accepted: number[] }>('/scan/sync/flush', scans),
+
+  checkIn: (uid: string) =>
+    api.post<{ success: boolean; error?: string; name: string; checkinTime: string; alreadyCheckedIn: boolean }>(
+      '/scan/sync/checkin', { uid, checkedAt: new Date().toISOString() }
+    ),
 }
 
 // ── Scan / lookup API ──────────────────────────────────────────────────────
