@@ -9,6 +9,8 @@ import { syncApi, eventApi, type ActiveEvent } from './api/client'
 
 type Tab = 'meal' | 'checkin' | 'info'
 
+const MANUAL_ENTRY_KEY = 'manualEntryEnabled'
+
 export default function App() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'))
   const [tab, setTab] = useState<Tab>('meal')
@@ -16,11 +18,20 @@ export default function App() {
   const [pendingCount, setPendingCount] = useState(0)
   const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null)
   const [activeEvent, setActiveEvent] = useState<ActiveEvent | null>(null)
+  const [lastScannedUid, setLastScannedUid] = useState<string | null>(null)
+  const [infoRefreshKey, setInfoRefreshKey] = useState(0)
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const cacheIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Manual entry: always on in dev; toggle by tapping version badge 5× in prod
+  const [manualEntryEnabled, setManualEntryEnabled] = useState<boolean>(
+    import.meta.env.DEV || localStorage.getItem(MANUAL_ENTRY_KEY) === '1'
+  )
+  const versionTapCount = useRef(0)
+  const versionTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Track online/offline status
+  // Track online/offline status — re-sync cache immediately on reconnect
   useEffect(() => {
-    const onOnline = () => setOnline(true)
+    const onOnline = () => { setOnline(true); warmUpCache() }
     const onOffline = () => setOnline(false)
     window.addEventListener('online', onOnline)
     window.addEventListener('offline', onOffline)
@@ -29,6 +40,22 @@ export default function App() {
       window.removeEventListener('offline', onOffline)
     }
   }, [])
+
+  const handleVersionTap = () => {
+    if (import.meta.env.DEV) return
+    versionTapCount.current += 1
+    if (versionTapTimer.current) clearTimeout(versionTapTimer.current)
+    versionTapTimer.current = setTimeout(() => { versionTapCount.current = 0 }, 3000)
+    if (versionTapCount.current >= 5) {
+      versionTapCount.current = 0
+      setManualEntryEnabled((prev) => {
+        const next = !prev
+        if (next) localStorage.setItem(MANUAL_ENTRY_KEY, '1')
+        else localStorage.removeItem(MANUAL_ENTRY_KEY)
+        return next
+      })
+    }
+  }
 
   // Update pending count
   const refreshPendingCount = async () => {
@@ -43,13 +70,20 @@ export default function App() {
     getLastSyncTime().then(setLastSyncAt)
     eventApi.getActive().then(setActiveEvent).catch(() => {})
 
+    // Flush scan queue every 10s
     syncIntervalRef.current = setInterval(() => {
       if (navigator.onLine) flushQueue()
       refreshPendingCount()
     }, 10_000)
 
+    // Re-sync cache every 5 minutes so data stays fresh
+    cacheIntervalRef.current = setInterval(() => {
+      if (navigator.onLine) warmUpCache()
+    }, 5 * 60_000)
+
     return () => {
       if (syncIntervalRef.current) clearInterval(syncIntervalRef.current)
+      if (cacheIntervalRef.current) clearInterval(cacheIntervalRef.current)
     }
   }, [])
 
@@ -106,6 +140,11 @@ export default function App() {
             <span className="text-[10px] text-blue-300 font-medium tracking-widest uppercase">Good Vessel · 好器皿</span>
             <span className="text-sm font-bold tracking-wide">
               {activeEvent ? `${activeEvent.name}${activeEvent.nameEng ? ` ${activeEvent.nameEng}` : ''}` : 'Scan'}
+              {' '}
+              <span
+              className={`text-[10px] font-normal select-none ${manualEntryEnabled && !import.meta.env.DEV ? 'text-yellow-400' : 'text-blue-400'}`}
+              onClick={handleVersionTap}
+            >v{__APP_VERSION__}</span>
             </span>
           </div>
         </div>
@@ -117,7 +156,7 @@ export default function App() {
         {(['meal', 'checkin', 'info'] as Tab[]).map((t) => (
           <button
             key={t}
-            onClick={() => setTab(t)}
+            onClick={() => { setTab(t); if (t === 'info') setInfoRefreshKey((k) => k + 1) }}
             className={`flex-1 py-3 text-sm font-semibold tracking-wide transition-colors ${
               tab === t
                 ? 'text-white border-b-2 border-white'
@@ -133,9 +172,9 @@ export default function App() {
 
       {/* Page content */}
       <main className="flex-1 overflow-y-auto">
-        {tab === 'meal' && <MealScan />}
-        {tab === 'checkin' && <CheckIn />}
-        {tab === 'info' && <MealInfo />}
+        {tab === 'meal' && <MealScan manualEntryEnabled={manualEntryEnabled} onScan={setLastScannedUid} />}
+        {tab === 'checkin' && <CheckIn manualEntryEnabled={manualEntryEnabled} />}
+        {tab === 'info' && <MealInfo lastScannedUid={lastScannedUid} refreshKey={infoRefreshKey} />}
       </main>
     </div>
   )

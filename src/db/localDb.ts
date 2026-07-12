@@ -9,6 +9,8 @@ export interface CachedProfile {
   cnName: string
   firstName: string
   lastName: string
+  rpId?: number
+  checkinTime?: string | null  // ISO string if checked in, null if not
 }
 
 export interface CachedMeal {

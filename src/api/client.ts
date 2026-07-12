@@ -1,7 +1,10 @@
 import axios from 'axios'
 import type { CachedProfile, CachedMeal, CachedRegisterMeal } from '../db/localDb'
 
-const api = axios.create({ baseURL: '/api' })
+// In dev: VITE_GOOD_API_URL is undefined → relative '/api' (Vite proxy handles it).
+// In prod (CloudFront): VITE_GOOD_API_URL=https://api.goodvessel.org → absolute URL.
+const BASE = import.meta.env.VITE_GOOD_API_URL ?? ''
+const api = axios.create({ baseURL: `${BASE}/api` })
 
 // Attach JWT if present (set after volunteer login)
 api.interceptors.request.use((config) => {
@@ -66,6 +69,11 @@ export const syncApi = {
 
   flushScans: (scans: ScanRequest[]) =>
     api.post<{ accepted: number[] }>('/scan/sync/flush', scans),
+
+  checkIn: (uid: string) =>
+    api.post<{ success: boolean; error?: string; name: string; checkinTime: string; alreadyCheckedIn: boolean }>(
+      '/scan/sync/checkin', { uid, checkedAt: new Date().toISOString() }
+    ),
 }
 
 // ── Scan / lookup API ──────────────────────────────────────────────────────
