@@ -20,10 +20,11 @@ export default function QrScanner({ onScan, active }: Props) {
     const reader = new BrowserMultiFormatReader()
     readerRef.current = reader
 
+    const DECODE_ERRORS = ['NotFoundException', 'ChecksumException', 'FormatException']
     reader.decodeFromVideoDevice(null, videoRef.current!, (result, err) => {
       if (result) {
         onScan(result.getText())
-      } else if (err && err.name !== 'NotFoundException') {
+      } else if (err && !DECODE_ERRORS.includes(err.name)) {
         setError('Camera error: ' + err.message)
       }
     }).catch((e) => setError('Camera access denied: ' + e.message))
