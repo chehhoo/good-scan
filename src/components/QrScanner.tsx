@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BrowserMultiFormatReader } from '@zxing/library'
+import { BrowserMultiFormatReader, NotFoundException, ChecksumException, FormatException } from '@zxing/library'
 
 interface Props {
   onScan: (result: string) => void
@@ -20,11 +20,10 @@ export default function QrScanner({ onScan, active }: Props) {
     const reader = new BrowserMultiFormatReader()
     readerRef.current = reader
 
-    const DECODE_ERRORS = ['NotFoundException', 'ChecksumException', 'FormatException']
     reader.decodeFromVideoDevice(null, videoRef.current!, (result, err) => {
       if (result) {
         onScan(result.getText())
-      } else if (err && !DECODE_ERRORS.includes(err.name)) {
+      } else if (err && !(err instanceof NotFoundException) && !(err instanceof ChecksumException) && !(err instanceof FormatException)) {
         setError('Camera error: ' + err.message)
       }
     }).catch((e) => setError('Camera access denied: ' + e.message))
