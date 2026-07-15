@@ -90,15 +90,20 @@ export default function App() {
   async function warmUpCache() {
     if (!navigator.onLine) return
     try {
-      const [profiles, meals, registerMeals] = await Promise.all([
+      const [profiles, meals, registerMeals, voided] = await Promise.all([
         syncApi.profiles(),
         syncApi.meals(),
         syncApi.registerMeals(),
+        syncApi.voidedScans(),
       ])
-      await db.transaction('rw', db.profiles, db.meals, db.registerMeals, async () => {
+      await db.transaction('rw', db.profiles, db.meals, db.registerMeals, db.scanQueue, async () => {
         await db.profiles.bulkPut(profiles.data)
         await db.meals.bulkPut(meals.data)
         await db.registerMeals.bulkPut(registerMeals.data)
+        // Remove locally-cached scans that were voided server-side
+        for (const v of voided.data) {
+          await db.scanQueue.where('[uid+mealId]').equals([v.uid, v.mealId]).delete()
+        }
       })
       setLastSyncAt(new Date())
     } catch {
