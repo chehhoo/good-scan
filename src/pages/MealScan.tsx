@@ -5,7 +5,7 @@ import { scanApi } from '../api/client'
 
 interface PickupRecord {
   name: string
-  scannedAt: string  // ISO timestamp
+  scannedAt: string
 }
 
 interface MealPlanRow {
@@ -19,16 +19,14 @@ interface MealPlanRow {
 interface ScanResult {
   name: string
   uid: string
-  // For the current scanned meal
   mealId: number
+  mealLabel: string
   mealOrdered: number
-  mealTaken: number    // after this scan
+  mealTaken: number
   mealRemaining: number
   status: 'ok' | 'exceeded' | 'error'
   errorMessage?: string
-  // Pickup history for this meal (local scanQueue)
   trackers: PickupRecord[]
-  // All household meal plans
   mealPlans: MealPlanRow[]
 }
 
@@ -43,7 +41,6 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const [listening, setListening] = useState(false)
 
-  // Load all event meals for the selector
   useEffect(() => {
     db.meals.orderBy('date').toArray().then((m) =>
       setMeals(m.sort((a, b) => a.date.localeCompare(b.date) || a.type - b.type))
@@ -60,7 +57,7 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
 
       if (!local) {
         setResult({
-          name: uid, uid, mealId: 0, mealOrdered: 0, mealTaken: 0, mealRemaining: 0,
+          name: uid, uid, mealId: 0, mealLabel: '', mealOrdered: 0, mealTaken: 0, mealRemaining: 0,
           status: 'error', errorMessage: '没有这个注册记录 UID not found',
           trackers: [], mealPlans: [],
         })
@@ -72,10 +69,11 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
       const name = profile.cnName || `${profile.firstName} ${profile.lastName}`
       onScan?.(uid)
 
-      const mealId = selectedMealId ?? detectCurrentMeal(personMeals)
+      const allMeals = await db.meals.toArray()
+      const mealId = selectedMealId ?? detectCurrentMeal(allMeals)
       if (!mealId) {
         setResult({
-          name, uid, mealId: 0, mealOrdered: 0, mealTaken: 0, mealRemaining: 0,
+          name, uid, mealId: 0, mealLabel: '', mealOrdered: 0, mealTaken: 0, mealRemaining: 0,
           status: 'error', errorMessage: '无当前餐 No active meal',
           trackers: [], mealPlans: [],
         })
@@ -83,14 +81,15 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
         return
       }
 
+      const meal = allMeals.find((m) => m.id === mealId)
+      const mealLabel = meal ? mealTypeLabel(meal.type) : ''
       const rm = registerMeals.find((r) => r.mealId === mealId)
       const ordered = rm?.qty ?? 0
       const taken = takenCounts[mealId] ?? 0
 
-      // Check if no meal order exists
       if (ordered === 0) {
         setResult({
-          name, uid, mealId, mealOrdered: 0, mealTaken: taken, mealRemaining: 0,
+          name, uid, mealId, mealLabel, mealOrdered: 0, mealTaken: taken, mealRemaining: 0,
           status: 'error', errorMessage: '沒有订餐记录 No meal order',
           trackers: [], mealPlans: await buildMealPlans(registerMeals, personMeals, takenCounts, uid, name),
         })
@@ -101,32 +100,23 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
       const isExceeded = taken >= ordered
       const newTaken = isExceeded ? taken : taken + 1
 
-      // Write to local scanQueue (even if exceeded — record the attempt)
       if (!isExceeded) {
         await queueScan(uid, mealId)
       }
 
-      // Fire-and-forget POST to good-api
       if (navigator.onLine && !isExceeded) {
-        scanApi.scan(uid, mealId).catch(() => { /* BackgroundSync handles retry */ })
+        scanApi.scan(uid, mealId).catch(() => {})
       }
 
-      // Build pickup history from local scanQueue for this uid+meal
       const queueEntries = await db.scanQueue
         .where('[uid+mealId]').equals([uid, mealId])
         .toArray()
-      const trackers: PickupRecord[] = queueEntries.map((e) => ({
-        name,
-        scannedAt: e.scannedAt,
-      }))
+      const trackers: PickupRecord[] = queueEntries.map((e) => ({ name, scannedAt: e.scannedAt }))
 
-      // Reflect the just-recorded scan in takenCounts before building the table
       const updatedTakenCounts = { ...takenCounts, [mealId]: newTaken }
 
       setResult({
-        name,
-        uid,
-        mealId,
+        name, uid, mealId, mealLabel,
         mealOrdered: ordered,
         mealTaken: newTaken,
         mealRemaining: Math.max(0, ordered - newTaken),
@@ -136,7 +126,7 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
       })
     } catch (e) {
       setResult({
-        name: uid, uid, mealId: 0, mealOrdered: 0, mealTaken: 0, mealRemaining: 0,
+        name: uid, uid, mealId: 0, mealLabel: '', mealOrdered: 0, mealTaken: 0, mealRemaining: 0,
         status: 'error', errorMessage: '系統问题 System error: ' + String(e),
         trackers: [], mealPlans: [],
       })
@@ -148,7 +138,7 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
   const startVoice = () => {
     const SpeechRecognition = window.SpeechRecognition ?? (window as any).webkitSpeechRecognition
     if (!SpeechRecognition) {
-      alert('此浏览器不支持语音识别 Voice recognition not supported in this browser')
+      alert('此浏览器不支持语音识别 Voice recognition not supported')
       return
     }
     if (recognitionRef.current) { recognitionRef.current.abort(); recognitionRef.current = null }
@@ -182,12 +172,18 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
     setTimeout(() => manualInputRef.current?.focus(), 100)
   }
 
+  const statusConfig = result ? {
+    ok:       { bg: 'bg-green-900',  border: 'border-green-700',  icon: '✓', iconBg: 'bg-green-500',   text: 'text-green-300',   zh: '成功！请拿饭盒',   en: 'MEAL SERVED' },
+    exceeded: { bg: 'bg-amber-950',  border: 'border-amber-700',  icon: '⚠', iconBg: 'bg-amber-500',   text: 'text-amber-300',   zh: '抱歉！已领了全部', en: 'QUOTA EXCEEDED' },
+    error:    { bg: 'bg-red-950',    border: 'border-red-800',    icon: '✗', iconBg: 'bg-red-600',     text: 'text-red-300',     zh: result.errorMessage ?? '错误', en: 'ERROR' },
+  }[result.status] : null
+
   return (
     <div className="min-h-full flex flex-col">
       {/* Meal selector */}
-      <div className="p-3 border-b border-blue-800 flex gap-2">
+      <div className="p-3 border-b border-blue-800">
         <select
-          className="flex-1 bg-blue-900 border border-blue-700 rounded-lg px-3 py-2 text-sm"
+          className="w-full bg-blue-900 border border-blue-700 rounded-lg px-3 py-2 text-sm"
           value={selectedMealId ?? ''}
           onChange={(e) => setSelectedMealId(e.target.value ? Number(e.target.value) : undefined)}
         >
@@ -208,7 +204,6 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
       {scanning && !loading && (
         <div className="flex-1 flex flex-col">
           <QrScanner onScan={handleScan} active={scanning} />
-          {/* Manual UID entry — hidden unless enabled */}
           {manualEntryEnabled && (
             <div className="p-3 border-t border-blue-800 flex gap-2">
               <input
@@ -246,93 +241,119 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
         </div>
       )}
 
-      {/* Scan result */}
-      {result && !loading && (
-        <div className="flex flex-col">
-          {/* Status banner */}
-          <div className={`px-4 py-3 text-center text-xl font-bold ${
-            result.status === 'ok'
-              ? 'bg-green-600'
-              : result.status === 'exceeded'
-              ? 'bg-yellow-600'
-              : 'bg-red-700'
-          }`}>
-            {result.status === 'ok' && '✓ 成功! 请拿饭盒 MEAL SERVED'}
-            {result.status === 'exceeded' && '⚠ 抱歉! 己领了全部的饭盒 QUOTA EXCEEDED'}
-            {result.status === 'error' && `✗ 抱歉! ${result.errorMessage}`}
-          </div>
+      {/* ── Scan result ─────────────────────────────────────────────── */}
+      {result && !loading && statusConfig && (
+        <div className="flex flex-col gap-0">
 
-          {/* Name */}
-          <div className="px-4 pt-3 text-center text-2xl font-bold tracking-wide">
-            {result.name}
-          </div>
-
-          {/* Three giant numbers + pickup list */}
-          <div className="flex px-4 pt-2 gap-4">
-            {/* Left: giant counts */}
-            <div className="flex flex-col leading-none">
-              <span className="font-black text-white" style={{ fontSize: '15vw' }}>
-                订了 {result.mealOrdered}
-              </span>
-              <span className="font-black text-white" style={{ fontSize: '15vw' }}>
-                领了 {result.mealTaken}
-              </span>
-              <span
-                className={`font-black ${result.mealRemaining > 0 ? 'text-green-400' : 'text-gray-500'}`}
-                style={{ fontSize: '15vw' }}
-              >
-                剩下 {result.mealRemaining}
-              </span>
+          {/* Status stripe */}
+          <div className={`flex items-center gap-3 px-4 py-3 ${statusConfig.bg} border-b ${statusConfig.border}`}>
+            <span className={`w-7 h-7 rounded-full ${statusConfig.iconBg} text-white flex items-center justify-center text-sm font-bold flex-shrink-0`}>
+              {statusConfig.icon}
+            </span>
+            <div className="flex flex-col leading-tight">
+              <span className={`font-bold text-base ${statusConfig.text}`}>{statusConfig.zh}</span>
+              <span className="text-xs opacity-60 tracking-widest font-semibold">{statusConfig.en}</span>
             </div>
+          </div>
 
-            {/* Right: pickup history */}
-            <div className="flex-1 flex flex-col justify-end pb-1 gap-1">
+          {/* Name + meal context */}
+          <div className="px-4 py-3 border-b border-blue-800 flex items-baseline gap-3">
+            <span className="text-2xl font-extrabold tracking-tight leading-none">{result.name}</span>
+            {result.mealLabel && (
+              <span className="text-xs text-blue-400 uppercase tracking-widest font-semibold whitespace-nowrap">{result.mealLabel}</span>
+            )}
+          </div>
+
+          {/* Counts: hero remaining + supporting ordered/taken */}
+          {result.status !== 'error' && (
+            <div className="flex border-b border-blue-800">
+              {/* Hero: Remaining */}
+              <div className="flex-1 px-4 py-4 flex flex-col gap-1">
+                <span className="text-xs text-blue-400 uppercase tracking-widest font-semibold">剩下 Remaining</span>
+                <span
+                  className={`font-black leading-none tabular-nums ${result.mealRemaining > 0 ? 'text-green-400' : 'text-blue-600'}`}
+                  style={{ fontSize: 'clamp(3.5rem, 18vw, 6rem)' }}
+                >
+                  {result.mealRemaining}
+                </span>
+              </div>
+
+              {/* Divider */}
+              <div className="w-px bg-blue-800 my-3" />
+
+              {/* Supporting: Ordered + Taken */}
+              <div className="flex flex-col justify-center px-5 gap-4">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs text-blue-400 uppercase tracking-widest font-semibold">订了 Ordered</span>
+                  <span className="text-2xl font-bold tabular-nums">{result.mealOrdered}</span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs text-blue-400 uppercase tracking-widest font-semibold">领了 Taken</span>
+                  <span className="text-2xl font-bold tabular-nums">{result.mealTaken}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Error detail */}
+          {result.status === 'error' && (
+            <div className="px-4 py-5 text-sm text-blue-300 leading-relaxed border-b border-blue-800">
+              {result.errorMessage}
+            </div>
+          )}
+
+          {/* Pickup history */}
+          {result.trackers.length > 0 && (
+            <div className="px-4 py-3 border-b border-blue-800 flex flex-col gap-2">
+              <span className="text-xs text-blue-400 uppercase tracking-widest font-semibold">领取记录 Pickup History</span>
               {result.trackers.map((t, i) => (
-                <div key={i} className="text-gray-400 font-bold" style={{ fontSize: '4vw' }}>
-                  <span className="text-gray-500 text-xs mr-1">{prettyTime(t.scannedAt)}</span>
-                  {t.name} 领了一盒
+                <div key={i} className="flex items-center gap-2 text-sm">
+                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${result.status === 'ok' ? 'bg-green-400' : 'bg-amber-400'}`} />
+                  <span className="text-white font-medium">{t.name} 领了一盒</span>
+                  <span className="ml-auto text-blue-500 text-xs tabular-nums">{prettyTime(t.scannedAt)}</span>
                 </div>
               ))}
             </div>
-          </div>
+          )}
 
           {/* Meal plans table */}
           {result.mealPlans.length > 0 && (
-            <div className="mx-4 mt-4 mb-4 rounded-xl overflow-hidden border border-blue-700">
-              <table className="w-full text-sm">
-                <thead className="bg-blue-800 text-blue-200 uppercase text-xs tracking-wide">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Location</th>
-                    <th className="px-3 py-2 text-left">Meal</th>
-                    <th className="px-3 py-2 text-center">订了<br/>Order</th>
-                    <th className="px-3 py-2 text-center">领了<br/>Taken</th>
-                    <th className="px-3 py-2 text-left">Pickup Records</th>
+            <div className="overflow-x-auto border-b border-blue-800">
+              <table className="w-full text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                <thead>
+                  <tr className="bg-blue-950 text-blue-400 text-xs uppercase tracking-widest">
+                    <th className="px-3 py-2 text-left font-semibold">地点</th>
+                    <th className="px-3 py-2 text-left font-semibold">餐食</th>
+                    <th className="px-3 py-2 text-center font-semibold">订</th>
+                    <th className="px-3 py-2 text-center font-semibold">领</th>
+                    <th className="px-3 py-2 text-left font-semibold">记录</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-blue-800">
+                <tbody className="divide-y divide-blue-900">
                   {result.mealPlans.map((row) => (
-                    <tr key={row.meal.id} className="bg-blue-900/40">
-                      <td className="px-3 py-2">
+                    <tr
+                      key={row.meal.id}
+                      className={row.meal.id === result.mealId ? 'bg-blue-900/50' : 'bg-blue-950/30'}
+                    >
+                      <td className="px-3 py-2.5 align-middle">
                         <LocationBadge locationId={row.meal.location} />
                       </td>
-                      <td className="px-3 py-2">
-                        <div className="font-semibold">{mealTypeLabel(row.meal.type)}</div>
-                        <div className="text-blue-400 text-xs">{row.meal.date} {row.meal.startTime.slice(0,5)}</div>
+                      <td className="px-3 py-2.5 align-middle">
+                        <div className="font-semibold text-sm">{mealTypeLabel(row.meal.type)}</div>
+                        <div className="text-blue-400 text-xs mt-0.5">{row.meal.date.slice(5)} · {row.meal.startTime.slice(0, 5)}</div>
                       </td>
-                      <td className="px-3 py-2 text-center">{row.ordered} 盒</td>
-                      <td className="px-3 py-2 text-center">
-                        <span className={row.taken >= row.ordered ? 'text-gray-500' : 'text-white'}>
-                          {row.taken} 盒
-                        </span>
+                      <td className="px-3 py-2.5 text-center align-middle">{row.ordered}</td>
+                      <td className={`px-3 py-2.5 text-center align-middle font-semibold ${row.taken >= row.ordered ? 'text-blue-600' : 'text-green-400'}`}>
+                        {row.taken}
                       </td>
-                      <td className="px-3 py-2">
-                        <ul className="list-disc list-inside space-y-0.5">
-                          {row.pickupRecords.map((pr, i) => (
-                            <li key={i} className="text-xs text-gray-400">
-                              {pr.name} <span className="text-gray-500">{prettyTime(pr.scannedAt)}</span>
-                            </li>
-                          ))}
-                        </ul>
+                      <td className="px-3 py-2.5 align-middle">
+                        {row.pickupRecords.map((pr, i) => (
+                          <div key={i} className="text-xs text-blue-400 flex gap-1 items-center">
+                            <span className="opacity-50">·</span>
+                            <span>{pr.name}</span>
+                            <span className="text-blue-600">{prettyTime(pr.scannedAt)}</span>
+                          </div>
+                        ))}
                       </td>
                     </tr>
                   ))}
@@ -341,12 +362,15 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
             </div>
           )}
 
-          {/* Scan next button */}
-          <div className="px-4 pb-6 pt-2">
+          {/* Scan next */}
+          <div className="px-4 py-4">
             <button
               onClick={reset}
-              className="w-full py-4 bg-blue-700 hover:bg-blue-600 active:bg-blue-800 rounded-xl text-lg font-bold tracking-wide transition-colors"
+              className="w-full py-4 bg-blue-800 hover:bg-blue-700 active:bg-blue-900 rounded-xl text-base font-bold tracking-wide transition-colors flex items-center justify-center gap-2"
             >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/>
+              </svg>
               扫描下一位 Scan Next
             </button>
           </div>
@@ -360,18 +384,10 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
 
 function LocationBadge({ locationId }: { locationId: number }) {
   if (locationId === 1)
-    return (
-      <span className="px-2 py-0.5 rounded text-black font-semibold text-xs" style={{ background: '#FFD400' }}>
-        Westin
-      </span>
-    )
+    return <span className="px-2 py-0.5 rounded text-black font-bold text-xs" style={{ background: '#FFD400' }}>Westin</span>
   if (locationId === 2)
-    return (
-      <span className="px-2 py-0.5 rounded font-semibold text-xs" style={{ background: '#d2b48c', color: '#000' }}>
-        Hilton
-      </span>
-    )
-  return <span className="px-2 py-0.5 rounded bg-gray-600 text-xs">Location {locationId}</span>
+    return <span className="px-2 py-0.5 rounded font-bold text-xs" style={{ background: '#d2b48c', color: '#000' }}>Hilton</span>
+  return <span className="px-2 py-0.5 rounded bg-blue-800 text-blue-300 text-xs">Loc {locationId}</span>
 }
 
 function mealTypeLabel(type: number) {
@@ -381,13 +397,11 @@ function mealTypeLabel(type: number) {
 function prettyTime(iso: string): string {
   const d = new Date(iso)
   const diffMin = Math.floor((Date.now() - d.getTime()) / 60000)
-  if (diffMin < 1)  return '刚刚 just now'
+  if (diffMin < 1)  return '刚刚'
   if (diffMin < 60) return `${diffMin} 分钟前`
   const hhmm = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
-  const today = new Date().toDateString() === d.toDateString()
-  if (today) return `今天 ${hhmm}`
-  const md = d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
-  return `${md} ${hhmm}`
+  if (new Date().toDateString() === d.toDateString()) return `今天 ${hhmm}`
+  return d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) + ' ' + hhmm
 }
 
 function groupByDate(meals: CachedMeal[]): { date: string; meals: CachedMeal[] }[] {
@@ -403,17 +417,40 @@ function formatDate(iso: string): string {
   return new Date(iso + 'T00:00:00').toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })
 }
 
+/**
+ * Auto-detects the current meal from the full meals cache.
+ * - 30 min early grace before startTime (volunteers set up early)
+ * - 60 min late grace after endTime (stragglers)
+ * - If no meal is active right now, returns the next upcoming meal
+ */
 function detectCurrentMeal(meals: CachedMeal[]): number | undefined {
   const now = new Date()
-  const hhmm = now.getHours() * 100 + now.getMinutes()
-  const today = now.toISOString().slice(0, 10)
-  const todayMeals = meals.filter((m) => m.date === today)
-  for (const m of todayMeals) {
+  const todayStr = now.toISOString().slice(0, 10)
+  const nowMin = now.getHours() * 60 + now.getMinutes()
+
+  const todayMeals = meals
+    .filter((m) => m.date === todayStr)
+    .sort((a, b) => a.type - b.type)
+
+  const EARLY_GRACE = 30  // minutes before startTime
+  const LATE_GRACE  = 60  // minutes after endTime
+
+  // Active window: startTime - 30min  →  endTime + 60min
+  const active = todayMeals.find((m) => {
     const [sh, sm] = m.startTime.split(':').map(Number)
     const [eh, em] = m.endTime.split(':').map(Number)
-    if (hhmm >= sh * 100 + sm && hhmm <= eh * 100 + em) return m.id
-  }
-  return todayMeals[0]?.id
+    const start = sh * 60 + sm - EARLY_GRACE
+    const end   = eh * 60 + em + LATE_GRACE
+    return nowMin >= start && nowMin <= end
+  })
+  if (active) return active.id
+
+  // No active meal — return next upcoming
+  const upcoming = todayMeals.find((m) => {
+    const [sh, sm] = m.startTime.split(':').map(Number)
+    return sh * 60 + sm - EARLY_GRACE > nowMin
+  })
+  return upcoming?.id
 }
 
 async function buildMealPlans(
@@ -431,11 +468,8 @@ async function buildMealPlans(
     const queueEntries = await db.scanQueue
       .where('[uid+mealId]').equals([uid, rm.mealId])
       .toArray()
-    const pickupRecords: PickupRecord[] = queueEntries.map((e) => ({
-      name,
-      scannedAt: e.scannedAt,
-    }))
+    const pickupRecords: PickupRecord[] = queueEntries.map((e) => ({ name, scannedAt: e.scannedAt }))
     rows.push({ meal, rm, ordered: rm.qty, taken, pickupRecords })
   }
-  return rows.sort((a, b) => new Date(a.meal.date).getTime() - new Date(b.meal.date).getTime() || a.meal.type - b.meal.type)
+  return rows.sort((a, b) => a.meal.date.localeCompare(b.meal.date) || a.meal.type - b.meal.type)
 }
