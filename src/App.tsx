@@ -179,7 +179,7 @@ export default function App() {
       <main className="flex-1 overflow-y-auto">
         {tab === 'meal' && <MealScan manualEntryEnabled={manualEntryEnabled} onScan={setLastScannedUid} />}
         {tab === 'checkin' && <CheckIn manualEntryEnabled={manualEntryEnabled} />}
-        {tab === 'info' && <MealInfo lastScannedUid={lastScannedUid} refreshKey={infoRefreshKey} />}
+        {tab === 'info' && <MealInfo lastScannedUid={lastScannedUid} refreshKey={infoRefreshKey} onSync={warmUpCache} />}
       </main>
     </div>
   )
