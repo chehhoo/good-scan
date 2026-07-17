@@ -4,7 +4,7 @@ import CheckIn from './pages/CheckIn'
 import MealInfo from './pages/MealInfo'
 import LoginPage from './pages/LoginPage'
 import StatusDot from './components/StatusDot'
-import { db, markSynced, getPendingScans, getLastSyncTime } from './db/localDb'
+import { db, markSynced, getPendingScans } from './db/localDb'
 import { syncApi, eventApi, type ActiveEvent } from './api/client'
 
 type Tab = 'meal' | 'checkin' | 'info'
@@ -67,7 +67,8 @@ export default function App() {
   useEffect(() => {
     warmUpCache()
     refreshPendingCount()
-    getLastSyncTime().then(setLastSyncAt)
+    const stored = localStorage.getItem('lastCacheSyncAt')
+    if (stored) setLastSyncAt(new Date(stored))
     eventApi.getActive().then(setActiveEvent).catch(() => {})
 
     // Flush scan queue every 10s
@@ -105,7 +106,9 @@ export default function App() {
           await db.scanQueue.where('[uid+mealId]').equals([v.uid, v.mealId]).delete()
         }
       })
-      setLastSyncAt(new Date())
+      const now = new Date()
+      setLastSyncAt(now)
+      localStorage.setItem('lastCacheSyncAt', now.toISOString())
     } catch {
       // Silently continue — stale cache is still usable
     }
