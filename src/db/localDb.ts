@@ -108,12 +108,12 @@ export async function markSynced(id: number) {
 }
 
 export async function getPendingScans(): Promise<ScanQueueItem[]> {
-  return db.scanQueue.where('synced').equals(0).toArray()
+  return db.scanQueue.filter((s) => s.synced === false).toArray()
 }
 
 export async function getLastSyncTime(): Promise<Date | null> {
-  const latest = await db.scanQueue
-    .where('synced').equals(1)
-    .last()
-  return latest ? new Date(latest.scannedAt) : null
+  const all = await db.scanQueue.filter((s) => s.synced === true).toArray()
+  if (all.length === 0) return null
+  const latest = all.reduce((a, b) => (a.scannedAt > b.scannedAt ? a : b))
+  return new Date(latest.scannedAt)
 }
