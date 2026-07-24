@@ -254,7 +254,13 @@ export default function MealInfo({ lastScannedUid, refreshKey, onSync }: Props) 
                 </tr>
               </thead>
               <tbody className="divide-y divide-blue-800">
-                {personResult.registerMeals.map((rm) => {
+                {[...personResult.registerMeals]
+                  .sort((a, b) => {
+                    const ma = personResult.meals.find((m) => m.id === a.mealId)
+                    const mb = personResult.meals.find((m) => m.id === b.mealId)
+                    return (ma?.date ?? '').localeCompare(mb?.date ?? '') || (ma?.type ?? 0) - (mb?.type ?? 0)
+                  })
+                  .map((rm) => {
                   const meal = personResult.meals.find((m) => m.id === rm.mealId)
                   if (!meal) return null
                   const taken = personResult.takenCounts[rm.mealId] ?? 0
