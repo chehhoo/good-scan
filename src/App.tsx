@@ -109,8 +109,13 @@ export default function App() {
       const now = new Date()
       setLastSyncAt(now)
       localStorage.setItem('lastCacheSyncAt', now.toISOString())
-    } catch {
-      // Silently continue — stale cache is still usable
+    } catch (e: unknown) {
+      // On 401, JWT has expired — force re-login
+      if (e && typeof e === 'object' && 'response' in e && (e as { response?: { status?: number } }).response?.status === 401) {
+        localStorage.removeItem('token')
+        setToken(null)
+      }
+      // Otherwise silently continue — stale cache is still usable
     }
   }
 
@@ -156,7 +161,7 @@ export default function App() {
             </span>
           </div>
         </div>
-        <StatusDot online={online} pendingCount={pendingCount} lastSyncAt={lastSyncAt} />
+        <StatusDot online={online} pendingCount={pendingCount} lastSyncAt={lastSyncAt} onSync={warmUpCache} />
       </header>
 
       {/* Top tab bar */}
