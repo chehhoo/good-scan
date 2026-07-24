@@ -66,7 +66,14 @@ export const db = new GoodScanDb()
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 export async function lookupByUid(uid: string) {
-  const profile = await db.profiles.where('uid').equals(uid).first()
+  let profile = await db.profiles.where('uid').equals(uid).first()
+  // Fallback: uid may be a numeric person ID entered manually
+  if (!profile) {
+    const numId = Number(uid)
+    if (Number.isInteger(numId) && numId > 0) {
+      profile = await db.profiles.get(numId) ?? undefined
+    }
+  }
   if (!profile) return null
 
   const registerMeals = await db.registerMeals

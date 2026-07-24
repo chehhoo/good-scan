@@ -22,6 +22,7 @@ export default function App() {
   const [infoRefreshKey, setInfoRefreshKey] = useState(0)
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const cacheIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const warmingUp = useRef(false)
   // Manual entry: always on in dev; toggle by tapping version badge 5× in prod
   const [manualEntryEnabled, setManualEntryEnabled] = useState<boolean>(
     import.meta.env.DEV || localStorage.getItem(MANUAL_ENTRY_KEY) === '1'
@@ -90,12 +91,15 @@ export default function App() {
 
   async function warmUpCache() {
     if (!navigator.onLine) return
+    if (warmingUp.current) return
+    warmingUp.current = true
     try {
-      const [profiles, meals, registerMeals, voided] = await Promise.all([
+      const [profiles, meals, registerMeals, voided, serverScans] = await Promise.all([
         syncApi.profiles(),
         syncApi.meals(),
         syncApi.registerMeals(),
         syncApi.voidedScans(),
+        syncApi.scans(),
       ])
       await db.transaction('rw', db.profiles, db.meals, db.registerMeals, db.scanQueue, async () => {
         await db.profiles.bulkPut(profiles.data)
@@ -105,12 +109,25 @@ export default function App() {
         for (const v of voided.data) {
           await db.scanQueue.where('[uid+mealId]').equals([v.uid, v.mealId]).delete()
         }
+        // Merge server scan records: delete all synced entries (filter avoids boolean/int mismatch), insert fresh ones
+        const syncedIds = await db.scanQueue.filter((s) => s.synced === true).primaryKeys()
+        await db.scanQueue.bulkDelete(syncedIds as number[])
+        await db.scanQueue.bulkAdd(
+          serverScans.data.map((s) => ({ uid: s.uid, mealId: s.mealId, scannedAt: s.scannedAt, synced: true as const }))
+        )
       })
       const now = new Date()
       setLastSyncAt(now)
       localStorage.setItem('lastCacheSyncAt', now.toISOString())
-    } catch {
-      // Silently continue — stale cache is still usable
+    } catch (e: unknown) {
+      // On 401, JWT has expired — force re-login
+      if (e && typeof e === 'object' && 'response' in e && (e as { response?: { status?: number } }).response?.status === 401) {
+        localStorage.removeItem('token')
+        setToken(null)
+      }
+      // Otherwise silently continue — stale cache is still usable
+    } finally {
+      warmingUp.current = false
     }
   }
 
@@ -156,7 +173,7 @@ export default function App() {
             </span>
           </div>
         </div>
-        <StatusDot online={online} pendingCount={pendingCount} lastSyncAt={lastSyncAt} />
+        <StatusDot online={online} pendingCount={pendingCount} lastSyncAt={lastSyncAt} onSync={warmUpCache} />
       </header>
 
       {/* Top tab bar */}

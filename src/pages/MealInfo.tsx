@@ -51,7 +51,7 @@ export default function MealInfo({ lastScannedUid, refreshKey, onSync }: Props) 
 
       const stats = await Promise.all(
         allMeals.map(async (m) => {
-          const taken = await db.scanQueue.where('mealId').equals(m.id).count()
+          const taken = await db.scanQueue.where('mealId').equals(m.id).filter((s) => s.synced === true).count()
           return { meal: m, ordered: orderedByMeal[m.id] ?? 0, taken }
         })
       )
