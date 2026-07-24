@@ -67,6 +67,9 @@ export const syncApi = {
   registerMeals: () =>
     api.get<CachedRegisterMeal[]>('/scan/sync/register-meals'),
 
+  scans: () =>
+    api.get<{ uid: string; mealId: number; scannedAt: string }[]>('/scan/sync/scans'),
+
   voidedScans: () =>
     api.get<{ uid: string; mealId: number }[]>('/scan/sync/voided-scans'),
 
