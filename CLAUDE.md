@@ -5,7 +5,7 @@
 **good-scan** is the volunteer scan app for the Good Camp conference platform. It is a **pure React PWA** — a static site that volunteers install on their phones via "Add to Home Screen". There is no backend in this repo. All data comes from the Spring Boot API in the `good-api` repo.
 
 Volunteers use this app on their personal phones to:
-- Scan attendee badge QR codes to record **meal pickups**
+- Scan attendee badge QR codes to record **meal pickups** and **conference check-in**
 - Look up attendee **meal status** (how many meals ordered / taken)
 - View real-time **meal inventory counts** per venue
 
@@ -51,6 +51,8 @@ good-api must be running for sync to work:
 docker compose up -d
 ```
 
+**Volunteer login access code** is configured in good-api (event-level setting). In dev, use the code for the active event (e.g. `GOSPEL2026`).
+
 ---
 
 ## Design Constraints
@@ -66,6 +68,7 @@ The app is used by volunteers in a noisy, crowded conference venue on their pers
 | Scan records never lost | Written to `scanQueue` in IndexedDB first; flushed to good-api when online |
 | Large, readable UI | Giant count numbers (15vw); dark blue theme; color-coded status banner |
 | Real-time data for attendees | good-scan flushes to good-api → good-conference polls good-api |
+| Stale data from previous events | `warmUpCache` does full `clear()` + `bulkAdd()` — never `bulkPut` |
 
 ---
 
@@ -95,19 +98,28 @@ Phone browser
                    → MariaDB :3306/good
 ```
 
-In dev, `VITE_GOOD_API_URL` is undefined → `baseURL` is `'/api'` → Vite proxy routes to `http://localhost:8090`. In prod (CloudFront), `VITE_GOOD_API_URL=https://api.goodvessel.org` → `baseURL` is `https://api.goodvessel.org/api` — absolute URL, no proxy needed.
+In dev, Vite proxies `/api` to `http://localhost:8090`. In prod, nginx routes `/api` to good-api.
+
+### Auth
+
+Volunteers log in once with an **event access code** (`POST /api/auth/volunteer`). The response JWT is stored in `localStorage` and attached to every Axios request via an interceptor. A 401 from any sync call clears the token and forces re-login. No per-attendee login — one shared volunteer code per event.
+
+**Manual entry mode:** In dev it is always on. In prod, tap the version badge 5× within 3 seconds to toggle it (shown in yellow when active). Allows typing a Person ID instead of scanning a QR code, plus voice input via the Web Speech API.
 
 ### Offline-First Data Flow
 
 ```
-── On app startup (or back online) ──────────────────────────────────
-  App.tsx warmUpCache()
-    GET /api/scan/sync/profiles      → db.profiles.bulkPut()
-    GET /api/scan/sync/meals         → db.meals.bulkPut()
-    GET /api/scan/sync/register-meals→ db.registerMeals.bulkPut()
+── On app startup / on reconnect ────────────────────────────────────
+  App.tsx warmUpCache()    (guarded by warmingUp ref — no concurrent runs)
+    GET /api/scan/sync/profiles       → db.profiles.clear() + bulkAdd()
+    GET /api/scan/sync/meals          → db.meals.clear() + bulkAdd()
+    GET /api/scan/sync/register-meals → db.registerMeals.clear() + bulkAdd()
+    GET /api/scan/sync/voided-scans   → delete matching scanQueue entries
+    GET /api/scan/sync/scans          → replace all synced scanQueue entries
+  lastCacheSyncAt saved to localStorage for StatusDot stale-check across reloads
 
 ── On QR scan (online or offline) ───────────────────────────────────
-  lookupByUid(uid)     → IndexedDB only — instant, no network
+  lookupByUid(uid)       → IndexedDB only — instant, no network
   queueScan(uid, mealId) → written to scanQueue in IndexedDB
   (if online) POST /api/meal/scan   → background, non-blocking
   display result immediately from IndexedDB data
@@ -115,12 +127,17 @@ In dev, `VITE_GOOD_API_URL` is undefined → `baseURL` is `'/api'` → Vite prox
 ── Background flush (every 10s, only when online) ────────────────────
   getPendingScans()
     → syncApi.flushScans(pending) → POST /api/scan/sync/flush
-    → markSynced(id) for each accepted scan
+    → markSynced(id) for each accepted localId
+
+── Cache re-sync (every 5 min, only when online) ─────────────────────
+  warmUpCache() → full clear + replace of all read-only tables
 
 ── Workbox BackgroundSync (Service Worker) ───────────────────────────
   POST /api/meal/scan queued in "scan-queue"
   auto-retried up to 24 hours when connectivity returns
 ```
+
+**Critical:** `warmUpCache` uses `clear()` + `bulkAdd()` (not `bulkPut`) for `profiles`, `meals`, and `registerMeals`. This ensures records from a previous event are always purged when a new event is active — verified in testing.
 
 ### IndexedDB Schema (Dexie.js — `src/db/localDb.ts`)
 
@@ -135,13 +152,15 @@ The compound index `[uid+mealId]` on `scanQueue` is required for per-person-per-
 
 ### Sync State: StatusDot (`src/components/StatusDot.tsx`)
 
-Shown in the app header at all times.
+Shown in the app header at all times. Tapping it triggers a manual `warmUpCache()`.
 
 | Color | Condition |
 |---|---|
 | Green | Online + cache fresh (last sync < 30 min ago) |
 | Yellow | Offline — shows count of unsynced scans in queue |
 | Red | Cache stale (last sync > 30 min ago — data may be outdated) |
+
+`lastCacheSyncAt` is persisted to `localStorage` so the stale indicator survives page reloads.
 
 ### PWA Distribution
 
@@ -155,26 +174,26 @@ Volunteers open `scan.goodvessel.org` in Chrome on their phone and tap **"Add to
 src/
 ├── api/
 │   └── client.ts          Axios instance + JWT interceptor + all TypeScript types
-│                          authApi  — POST /auth/volunteer (volunteer login)
-│                          scanApi  — direct scan/lookup calls (online only)
-│                          syncApi  — bulk profile/meal/flush calls for IndexedDB warm-up
+│                          eventApi — GET /register/event-info (active event name)
+│                          syncApi  — bulk profile/meal/scan sync endpoints
+│                          scanApi  — direct meal scan/lookup calls
 ├── components/
 │   ├── QrScanner.tsx      @zxing/library camera reader; fires onScan(uid) callback
 │   ├── ResultBanner.tsx   Color-coded banner (used in CheckIn only — not MealScan)
-│   └── StatusDot.tsx      Online/offline/stale indicator in app header
+│   └── StatusDot.tsx      Online/offline/stale indicator; tap to trigger manual sync
 ├── db/
 │   └── localDb.ts         Dexie IndexedDB class + helpers:
-│                          lookupByUid()   — profile + meals + taken counts
-│                          queueScan()     — write scan record locally
-│                          markSynced()    — mark flushed record
+│                          lookupByUid()     — profile + meals + taken counts
+│                          queueScan()       — write scan record locally
+│                          markSynced()      — mark flushed record
 │                          getPendingScans() — get unsynced queue items
 │                          getLastSyncTime() — last successful sync timestamp
 ├── pages/
-│   ├── LoginPage.tsx      Shown when no JWT in localStorage; access code input + QR magic link
+│   ├── LoginPage.tsx      Volunteer access-code login; sets JWT in localStorage
 │   ├── MealScan.tsx       Tab 1: QR scan → meal pickup result (offline-first)
-│   ├── CheckIn.tsx        Tab 2: QR scan → meal status lookup (offline-first)
+│   ├── CheckIn.tsx        Tab 2: QR scan → conference check-in (requires network)
 │   └── MealInfo.tsx       Tab 3: Venue pickup counts (requires network)
-├── App.tsx                Root: login gate → header + tab bar + warmUpCache + flush every 10s
+├── App.tsx                Login gate → header + tab bar + warmUpCache + flush/re-sync intervals
 └── main.tsx
 index.html
 vite.config.ts             PWA manifest + Workbox runtimeCaching + BackgroundSync + /api proxy
@@ -184,29 +203,33 @@ package.json               key deps: react 18, dexie 4, @zxing/library, vite-plu
 ### Key Conventions
 
 - **API calls:** All in `src/api/client.ts` — never import axios directly in pages or components.
-- **Offline reads:** `lookupByUid()` only — zero network calls for the scan result display.
-- **Offline writes:** `queueScan()` first, then attempt `scanApi.scan()` in background; never block the UI on the network.
+- **Offline reads:** `lookupByUid()` only — zero network calls for MealScan result display.
+- **Offline writes:** `queueScan()` first, then attempt `scanApi.scan()` in background.
+- **Cache warm-up:** Always `clear()` + `bulkAdd()` for read-only tables — never `bulkPut`. This prevents stale previous-event data from surviving into a new event.
 - **UI language:** Chinese first, English second (e.g., `餐食 Meal`, `订了 Order`).
 - **Styling:** Dark blue theme (`bg-blue-950`). Large touch targets for noisy venue use.
-- **Auth:** JWT stored in `localStorage`. Axios interceptor in `client.ts` attaches `Authorization: Bearer` to every request. Volunteers log in via `LoginPage.tsx` using an event access code set by the admin in good-api. Token subject is `volunteer:{eventId}` and expires after 7 days. If no token in localStorage, `App.tsx` renders `LoginPage` instead of the main UI. Auto-login supported via `?code=` query param (QR / magic link).
-- **ResultBanner** is used only in `CheckIn.tsx`. `MealScan.tsx` renders its own inline result UI (see MealScan Result UI section).
+- **Auth:** JWT in `localStorage`. Axios interceptor attaches `Authorization: Bearer` to every request. 401 on any sync call → clear token → show LoginPage.
+- **ResultBanner** is used only in `CheckIn.tsx`. `MealScan.tsx` renders its own inline result UI.
+- **CheckIn** requires network (calls `syncApi.checkIn(uid)` — check-in is not offline-capable).
+- **manualEntryEnabled** prop is passed from App to MealScan and CheckIn; always true in dev, toggled by 5-tap on version badge in prod.
 
 ### good-api Endpoints Used (all under `/api`)
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/auth/volunteer` | Public | Exchange event access code for a 7-day volunteer JWT |
-| GET | `/scan/sync/profiles` | JWT | All attendee profiles for active event |
-| GET | `/scan/sync/meals` | JWT | All meals for active event |
-| GET | `/scan/sync/register-meals` | JWT | All household meal orders (entitlements) |
-| POST | `/scan/sync/flush` | JWT | Bulk flush queued scans; body: `[{localId, uid, mealId, scannedAt}]`; returns `{accepted: number[]}` |
-| POST | `/meal/scan` | JWT | Record single meal pickup (real-time, online-only path) |
-| GET | `/meal/status/{uid}` | JWT | All meal plans for a badge UID |
-| GET | `/meal/info/{location}` | JWT | Meal list for a venue (used by MealInfo tab) |
-| GET | `/meal/count/{mealId}` | JWT | Pickup count for a specific meal |
-| GET | `/meal/venues` | JWT | List available venues |
-
-**Flush `localId` design:** each `ScanQueueItem` has an auto-increment `id` in IndexedDB. The flush request includes `localId: s.id` so the server can echo it back in `accepted[]`. The client then filters `pending.filter(s => accepted.includes(s.id!))` to mark only accepted entries as synced. Items rejected (quota exceeded, no entitlement) remain `synced: false` and retry on the next 10s interval.
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/auth/volunteer` | Volunteer login; returns JWT |
+| GET | `/register/event-info` | Active event name (shown in header) |
+| GET | `/scan/sync/profiles` | All attendee profiles for current event |
+| GET | `/scan/sync/meals` | All meals for current event |
+| GET | `/scan/sync/register-meals` | All household meal orders |
+| GET | `/scan/sync/voided-scans` | Scan records voided server-side |
+| GET | `/scan/sync/scans` | All confirmed scan records (for local cache) |
+| POST | `/scan/sync/flush` | Bulk flush queued scans; returns `{ accepted: number[] }` |
+| POST | `/meal/scan` | Record single meal pickup (also called per-scan) |
+| POST | `/scan/checkin` | Conference check-in for a UID |
+| GET | `/meal/info/{location}` | Meal list for a venue (MealInfo tab) |
+| GET | `/meal/count/{mealId}` | Pickup count for a specific meal |
+| GET | `/meal/venues` | List available venues |
 
 ---
 
@@ -230,29 +253,17 @@ Modelled after the original JSF/PrimeFaces `scanmeal.xhtml` screen from `meal-pi
   [ 扫描下一位 Scan Next ]
 ```
 
-**Status banner** (top, full-width):
-- Green `bg-green-600` — `成功! 请拿饭盒 MEAL SERVED`
-- Yellow `bg-yellow-600` — `抱歉! 己领了全部的饭盒 QUOTA EXCEEDED`
-- Red `bg-red-700` — error message (UID not found / no meal order / system error)
+**Status banner colors:**
+- Green `bg-green-600` — 成功! 请拿饭盒 MEAL SERVED
+- Yellow `bg-yellow-600` — 抱歉! 己领了全部的饭盒 QUOTA EXCEEDED
+- Red `bg-red-700` — error (UID not found / no meal order / system error)
 
-**Three giant count numbers** (left column, `font-size: 15vw`):
-- `订了 X` — qty ordered for this meal (`CachedRegisterMeal.qty`)
-- `领了 X` — taken count after this scan (from `scanQueue` count + 1)
-- `剩下 X` — remaining; green (`text-green-400`) if > 0, gray if 0
+**Three giant count numbers** (`15vw`) mirror the original JSF 160px labels: 订了/领了/剩下.
 
-**Pickup history** (right column, `font-size: 4vw`, dark gray):
-- Each entry: `"{relative time} {name} 领了一盒"`
-- Data source: local `scanQueue` entries for this `[uid+mealId]`
-- Relative time: `刚刚 just now` / `N 分钟前` / `HH:MM` (> 1 hour)
-- Mirrors the JSF `mealTrackers` list with `PrettyTimeConverter`
+**Pickup history** (right column, `4vw`) from local `scanQueue` — mirrors JSF `mealTrackers`.
 
-**Meal plans table** (below the counts):
-- Location badge: Westin = `#FFD400` yellow / black text; Hilton = `#d2b48c` tan / black text
-- One row per `CachedRegisterMeal` entry for the household
-- Ordered/Taken in `X 盒` format; per-meal pickup records from `scanQueue`
-- Mirrors JSF `p:dataTable id="mealplans"`
-
-**"扫描下一位 Scan Next"** button at bottom — clears result and reopens camera.
+**Meal plans table** mirrors JSF `p:dataTable mealplans`:
+- Location badge: Westin = `#FFD400` yellow / black; Hilton = `#d2b48c` tan / black
 
 ---
 
@@ -270,4 +281,7 @@ VITE_GOOD_API_URL=https://api.goodvessel.org
 
 ## Annual Update Checklist
 
-Before each conference year, update event IDs and meal IDs in good-api (not in this repo). The IndexedDB cache is populated dynamically from good-api at runtime.
+Before each conference year:
+1. Update the event access code in good-api
+2. Verify meal IDs and event ID in good-api
+3. Clear any stale IndexedDB data by ensuring volunteers reload the app (warmUpCache will clear and replace automatically on first load after login)
