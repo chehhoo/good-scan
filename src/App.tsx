@@ -102,9 +102,13 @@ export default function App() {
         syncApi.scans(),
       ])
       await db.transaction('rw', db.profiles, db.meals, db.registerMeals, db.scanQueue, async () => {
-        await db.profiles.bulkPut(profiles.data)
-        await db.meals.bulkPut(meals.data)
-        await db.registerMeals.bulkPut(registerMeals.data)
+        // Full replace — clear first so records from a previous event don't linger
+        await db.profiles.clear()
+        await db.profiles.bulkAdd(profiles.data)
+        await db.meals.clear()
+        await db.meals.bulkAdd(meals.data)
+        await db.registerMeals.clear()
+        await db.registerMeals.bulkAdd(registerMeals.data)
         // Remove locally-cached scans that were voided server-side
         for (const v of voided.data) {
           await db.scanQueue.where('[uid+mealId]').equals([v.uid, v.mealId]).delete()
