@@ -55,6 +55,30 @@ docker compose up -d
 
 ---
 
+## Release Process
+
+Releases are triggered by pushing a `v*` tag. The CI workflow builds and deploys to S3 + CloudFront automatically.
+
+**To cut a release** (after all PRs are merged into main):
+
+```powershell
+git checkout main
+git pull
+npm version patch   # or minor (new features) or major (breaking changes)
+git push && git push --tags
+```
+
+`npm version` bumps `package.json`, commits `vX.Y.Z`, and creates the tag in one step. The pushed tag triggers CI deploy.
+
+**Bump rules:**
+- `patch` — bug fixes, docs, chores
+- `minor` — new features (new tab, new scan type, new sync endpoint)
+- `major` — breaking changes (auth overhaul, schema migration requiring cache clear)
+
+**Version is displayed** in the app header via `__APP_VERSION__` injected at build time from `package.json`.
+
+---
+
 ## Design Constraints
 
 The app is used by volunteers in a noisy, crowded conference venue on their personal phones.
@@ -100,7 +124,7 @@ Phone browser
 
 In dev, `VITE_GOOD_API_URL` is undefined → `baseURL` is `'/api'` → Vite proxy routes to `http://localhost:8090`. In prod (CloudFront), `VITE_GOOD_API_URL=https://api.goodvessel.org` → `baseURL` is `https://api.goodvessel.org/api` — absolute URL, no proxy needed.
 
-`vite.config.ts` also injects `__APP_VERSION__` from `package.json` at build time, displayed in the app header. The post-commit hook auto-bumps the patch version on every commit.
+`vite.config.ts` also injects `__APP_VERSION__` from `package.json` at build time, displayed in the app header.
 
 ### Auth
 
