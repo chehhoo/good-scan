@@ -98,7 +98,9 @@ Phone browser
                    → MariaDB :3306/good
 ```
 
-In dev, Vite proxies `/api` to `http://localhost:8090`. In prod, nginx routes `/api` to good-api.
+In dev, `VITE_GOOD_API_URL` is undefined → `baseURL` is `'/api'` → Vite proxy routes to `http://localhost:8090`. In prod (CloudFront), `VITE_GOOD_API_URL=https://api.goodvessel.org` → `baseURL` is `https://api.goodvessel.org/api` — absolute URL, no proxy needed.
+
+`vite.config.ts` also injects `__APP_VERSION__` from `package.json` at build time, displayed in the app header. The post-commit hook auto-bumps the patch version on every commit.
 
 ### Auth
 
@@ -152,13 +154,16 @@ The compound index `[uid+mealId]` on `scanQueue` is required for per-person-per-
 
 ### Sync State: StatusDot (`src/components/StatusDot.tsx`)
 
-Shown in the app header at all times. Tapping it triggers a manual `warmUpCache()`.
+Props: `{ online, pendingCount, lastSyncAt, onSync: () => Promise<void> }`
+
+Shown in the app header at all times. Tapping it (when online + stale + not already syncing) calls `onSync()` which triggers `warmUpCache()` in App.tsx. While syncing, the dot turns yellow with `animate-pulse` and shows "同步中…".
 
 | Color | Condition |
 |---|---|
 | Green | Online + cache fresh (last sync < 30 min ago) |
-| Yellow | Offline — shows count of unsynced scans in queue |
-| Red | Cache stale (last sync > 30 min ago — data may be outdated) |
+| Yellow (static) | Offline — shows count of unsynced scans in queue |
+| Yellow (pulsing) | Actively syncing in response to tap |
+| Red | Cache stale (last sync > 30 min ago) — tappable to trigger sync |
 
 `lastCacheSyncAt` is persisted to `localStorage` so the stale indicator survives page reloads.
 
@@ -226,7 +231,7 @@ package.json               key deps: react 18, dexie 4, @zxing/library, vite-plu
 | GET | `/scan/sync/scans` | All confirmed scan records (for local cache) |
 | POST | `/scan/sync/flush` | Bulk flush queued scans; returns `{ accepted: number[] }` |
 | POST | `/meal/scan` | Record single meal pickup (also called per-scan) |
-| POST | `/scan/checkin` | Conference check-in for a UID |
+| POST | `/scan/sync/checkin` | Conference check-in for a UID (`syncApi.checkIn`) |
 | GET | `/meal/info/{location}` | Meal list for a venue (MealInfo tab) |
 | GET | `/meal/count/{mealId}` | Pickup count for a specific meal |
 | GET | `/meal/venues` | List available venues |
