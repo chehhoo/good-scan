@@ -27,3 +27,19 @@ export const REGISTER_MEALS = [
 ]
 
 export const EMPTY_SYNC = { voided: [], scans: [] }
+
+/**
+ * Meals with concrete time windows for auto-detection tests.
+ * Grace periods: 30 min early, 60 min late.
+ *   Lunch active window:  11:30 → 14:30
+ *   Dinner active window: 17:30 → 20:30
+ */
+export const TIMED_MEALS = [
+  { id: 1, date: TODAY, type: 2, location: 1, startTime: '12:00:00', endTime: '13:30:00' }, // Lunch, Westin
+  { id: 2, date: TODAY, type: 3, location: 2, startTime: '18:00:00', endTime: '19:30:00' }, // Dinner, Hilton
+]
+
+export const TIMED_REGISTER_MEALS = [
+  { id: 1, householdId: 1, mealId: 1, registerId: 1, qty: 1 }, // U001 ordered lunch
+  { id: 2, householdId: 1, mealId: 2, registerId: 1, qty: 1 }, // U001 ordered dinner
+]

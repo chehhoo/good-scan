@@ -2,10 +2,29 @@ import type { Page } from '@playwright/test'
 import { PROFILES, MEALS, REGISTER_MEALS, TEST_TOKEN } from './test-data'
 
 /**
+ * Freeze the browser's clock to a specific HH:MM on today's date.
+ * Uses Playwright's native clock API (page.clock.setFixedTime) which intercepts
+ * Date, performance.now, setTimeout, etc. at the CDP level — more reliable than
+ * window.Date replacement via addInitScript.
+ * Must be called BEFORE page.goto().
+ */
+export async function mockCurrentTime(page: Page, hhMm: string) {
+  const [h, m] = hhMm.split(':').map(Number)
+  const fakeTs = new Date()
+  fakeTs.setHours(h, m, 0, 0)
+  // setSystemTime changes Date without freezing timers (unlike setFixedTime)
+  await page.clock.setSystemTime(fakeTs)
+}
+
+/**
  * Mocks all five sync endpoints so warmUpCache() populates IndexedDB with
  * test data. Call this before page.goto('/') in any test that needs DB data.
+ * Pass custom meals/registerMeals to override the defaults (e.g. for auto-detection tests).
  */
-export async function mockSyncEndpoints(page: Page) {
+export async function mockSyncEndpoints(
+  page: Page,
+  overrides: { meals?: unknown[]; registerMeals?: unknown[] } = {}
+) {
   await page.route('**/api/auth/volunteer', (r) =>
     r.fulfill({ json: { token: TEST_TOKEN } })
   )
@@ -16,10 +35,10 @@ export async function mockSyncEndpoints(page: Page) {
     r.fulfill({ json: PROFILES })
   )
   await page.route('**/api/scan/sync/meals', (r) =>
-    r.fulfill({ json: MEALS })
+    r.fulfill({ json: overrides.meals ?? MEALS })
   )
   await page.route('**/api/scan/sync/register-meals', (r) =>
-    r.fulfill({ json: REGISTER_MEALS })
+    r.fulfill({ json: overrides.registerMeals ?? REGISTER_MEALS })
   )
   await page.route('**/api/scan/sync/voided-scans', (r) =>
     r.fulfill({ json: [] })
