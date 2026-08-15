@@ -16,3 +16,8 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Playwright
+e2e/fixtures/.auth.json
+playwright-report/
+test-results/
