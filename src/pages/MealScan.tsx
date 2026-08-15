@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useRef } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
 import QrScanner from '../components/QrScanner'
 import { db, lookupByUid, queueScan, type CachedMeal, type CachedRegisterMeal } from '../db/localDb'
 import { scanApi } from '../api/client'
@@ -33,19 +34,17 @@ interface ScanResult {
 export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEnabled: boolean; onScan?: (uid: string) => void }) {
   const [scanning, setScanning] = useState(true)
   const [result, setResult] = useState<ScanResult | null>(null)
-  const [meals, setMeals] = useState<CachedMeal[]>([])
+  const meals = useLiveQuery(
+    () => db.meals.orderBy('date').toArray().then((m) => m.sort((a, b) => a.date.localeCompare(b.date) || a.type - b.type)),
+    [],
+    [] as CachedMeal[]
+  )
   const [selectedMealId, setSelectedMealId] = useState<number | undefined>(undefined)
   const [loading, setLoading] = useState(false)
   const [manualUid, setManualUid] = useState('')
   const manualInputRef = useRef<HTMLInputElement>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const [listening, setListening] = useState(false)
-
-  useEffect(() => {
-    db.meals.orderBy('date').toArray().then((m) =>
-      setMeals(m.sort((a, b) => a.date.localeCompare(b.date) || a.type - b.type))
-    )
-  }, [])
 
   const handleScan = useCallback(async (uid: string) => {
     if (loading) return
@@ -425,7 +424,11 @@ function formatDate(iso: string): string {
  */
 function detectCurrentMeal(meals: CachedMeal[]): number | undefined {
   const now = new Date()
-  const todayStr = now.toISOString().slice(0, 10)
+  const todayStr = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-')
   const nowMin = now.getHours() * 60 + now.getMinutes()
 
   const todayMeals = meals
