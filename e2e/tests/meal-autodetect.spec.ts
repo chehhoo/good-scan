@@ -14,10 +14,19 @@ import { TIMED_MEALS, TIMED_REGISTER_MEALS } from '../fixtures/test-data'
 
 const OPTS = { meals: TIMED_MEALS, registerMeals: TIMED_REGISTER_MEALS }
 
-async function scanU001(page: ReturnType<typeof test['info']> extends never ? never : Parameters<Parameters<typeof test>[1]>[0]['page']) {
+type TestPage = Parameters<Parameters<typeof test>[1]>[0]['page']
+
+async function scanU001(page: TestPage) {
   await page.locator('input[placeholder="手动输入 Person ID"]').fill('U001')
   await page.locator('button:has-text("查询 Go")').click()
   await expect(page.getByText('成功！请拿饭盒')).toBeVisible()
+}
+
+// The meal label appears in a <span> with these classes, distinct from the table rows
+async function expectMealLabel(page: TestPage, label: string) {
+  await expect(
+    page.locator('span.uppercase.tracking-widest', { hasText: label })
+  ).toBeVisible()
 }
 
 test.describe('Meal auto-detection', () => {
@@ -27,7 +36,7 @@ test.describe('Meal auto-detection', () => {
     await gotoAndSync(page)
 
     await scanU001(page)
-    await expect(page.getByText('午餐 Lunch')).toBeVisible()
+    await expectMealLabel(page, '午餐 Lunch')
   })
 
   test('3.2 — 29 min before lunch start (within 30 min early grace) → lunch selected', async ({ page }) => {
@@ -36,7 +45,7 @@ test.describe('Meal auto-detection', () => {
     await gotoAndSync(page)
 
     await scanU001(page)
-    await expect(page.getByText('午餐 Lunch')).toBeVisible()
+    await expectMealLabel(page, '午餐 Lunch')
   })
 
   test('3.3 — 55 min after lunch end (within 60 min late grace) → lunch still selected', async ({ page }) => {
@@ -45,7 +54,7 @@ test.describe('Meal auto-detection', () => {
     await gotoAndSync(page)
 
     await scanU001(page)
-    await expect(page.getByText('午餐 Lunch')).toBeVisible()
+    await expectMealLabel(page, '午餐 Lunch')
   })
 
   test('3.4 — before any meal window, no grace → next upcoming (lunch) selected', async ({ page }) => {
@@ -54,7 +63,7 @@ test.describe('Meal auto-detection', () => {
     await gotoAndSync(page)
 
     await scanU001(page)
-    await expect(page.getByText('午餐 Lunch')).toBeVisible()
+    await expectMealLabel(page, '午餐 Lunch')
   })
 
   test('3.5 — manual dropdown override → selected meal respected, not auto-detected', async ({ page }) => {
@@ -62,12 +71,13 @@ test.describe('Meal auto-detection', () => {
     await mockSyncEndpoints(page, OPTS)
     await gotoAndSync(page)
 
-    // Manually select Dinner from the dropdown (selectOption requires string, not regex)
+    // Wait for useLiveQuery to populate the dropdown (options are hidden inside a closed <select>)
+    await page.locator('select option', { hasText: '晚餐 Dinner' }).waitFor({ state: 'attached', timeout: 5_000 })
     const dinnerOption = await page.locator('select option', { hasText: '晚餐 Dinner' }).getAttribute('value')
     await page.locator('select').selectOption(dinnerOption!)
 
     await scanU001(page)
     // Should show Dinner, not the auto-detected Lunch
-    await expect(page.getByText('晚餐 Dinner')).toBeVisible()
+    await expectMealLabel(page, '晚餐 Dinner')
   })
 })

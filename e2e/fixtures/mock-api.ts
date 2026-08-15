@@ -12,8 +12,8 @@ export async function mockCurrentTime(page: Page, hhMm: string) {
   const [h, m] = hhMm.split(':').map(Number)
   const fakeTs = new Date()
   fakeTs.setHours(h, m, 0, 0)
-  // setSystemTime changes Date without freezing timers (unlike setFixedTime)
-  await page.clock.setSystemTime(fakeTs)
+  // setFixedTime works without clock.install() and doesn't freeze timers
+  await page.clock.setFixedTime(fakeTs)
 }
 
 /**

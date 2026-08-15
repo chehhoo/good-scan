@@ -91,7 +91,9 @@ test.describe('Offline operation', () => {
     await page.locator('button:has-text("查询 Go")').click()
     await expect(page.getByText('成功！请拿饭盒')).toBeVisible()
     const takenAfter = await page.locator('.text-2xl.font-bold.tabular-nums').nth(1).textContent()
-    expect(takenAfter?.trim()).toBe('0')
+    // void removed the old scan (taken was 1), this is a fresh scan so shown taken = 1
+    // if void didn't work, taken would be 2 (old scan + new scan)
+    expect(takenAfter?.trim()).toBe('1')
   })
 
   test('4.5 — stale previous-event data cleared on re-sync (clear + bulkAdd, not upsert)', async ({ page }) => {
@@ -121,6 +123,6 @@ test.describe('Offline operation', () => {
     // U999 should no longer be found — IndexedDB was cleared and replaced
     await page.locator('input[placeholder="手动输入 Person ID"]').fill('U999')
     await page.locator('button:has-text("查询 Go")').click()
-    await expect(page.getByText('没有这个注册记录 UID not found')).toBeVisible({ timeout: 5_000 })
+    await expect(page.locator('span.text-red-300').filter({ hasText: '没有这个注册记录 UID not found' })).toBeVisible({ timeout: 5_000 })
   })
 })

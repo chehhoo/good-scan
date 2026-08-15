@@ -6,7 +6,13 @@
  * regardless of when the test runs.
  */
 
-export const TODAY = new Date().toISOString().slice(0, 10)
+// Use local date components to match detectCurrentMeal (which uses getFullYear/Month/Date)
+const _now = new Date()
+export const TODAY = [
+  _now.getFullYear(),
+  String(_now.getMonth() + 1).padStart(2, '0'),
+  String(_now.getDate()).padStart(2, '0'),
+].join('-')
 
 export const TEST_TOKEN = 'test-jwt-volunteer'
 
