@@ -70,7 +70,16 @@ export default function App() {
     refreshPendingCount()
     const stored = localStorage.getItem('lastCacheSyncAt')
     if (stored) setLastSyncAt(new Date(stored))
-    eventApi.getActive().then(setActiveEvent).catch(() => {})
+    eventApi.getActive().then((event) => {
+      setActiveEvent(event)
+      // If the active event has changed since login, force re-login with the new code
+      const tokenEventId = localStorage.getItem('tokenEventId')
+      if (tokenEventId && String(event.id) !== tokenEventId) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('tokenEventId')
+        setToken(null)
+      }
+    }).catch(() => {})
 
     // Flush scan queue every 10s
     syncIntervalRef.current = setInterval(() => {
@@ -127,6 +136,7 @@ export default function App() {
       // On 401, JWT has expired — force re-login
       if (e && typeof e === 'object' && 'response' in e && (e as { response?: { status?: number } }).response?.status === 401) {
         localStorage.removeItem('token')
+        localStorage.removeItem('tokenEventId')
         setToken(null)
       }
       // Otherwise silently continue — stale cache is still usable

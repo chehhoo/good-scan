@@ -28,6 +28,7 @@ export default function LoginPage({ onLogin }: Props) {
     try {
       const res = await authApi.volunteerLogin(accessCode)
       localStorage.setItem('token', res.data.token)
+      localStorage.setItem('tokenEventId', String(res.data.eventId))
       // Remove ?code= from URL so refreshing doesn't re-submit
       window.history.replaceState({}, '', window.location.pathname)
       onLogin(res.data.token)
