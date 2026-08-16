@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import QrScanner from '../components/QrScanner'
 import { db, lookupByUid, queueScan, type CachedMeal, type CachedRegisterMeal } from '../db/localDb'
@@ -180,24 +180,11 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
   return (
     <div className="min-h-full flex flex-col">
       {/* Meal selector */}
-      <div className="p-3 border-b border-blue-800">
-        <select
-          className="w-full bg-blue-900 border border-blue-700 rounded-lg px-3 py-2 text-sm"
-          value={selectedMealId ?? ''}
-          onChange={(e) => setSelectedMealId(e.target.value ? Number(e.target.value) : undefined)}
-        >
-          <option value="">自动检测 Auto-detect meal</option>
-          {groupByDate(meals).map(({ date, meals: dayMeals }) => (
-            <optgroup key={date} label={formatDate(date)}>
-              {dayMeals.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {mealTypeLabel(m.type)} {m.startTime.slice(0, 5)}–{m.endTime.slice(0, 5)}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-      </div>
+      <MealPillBar
+        meals={meals}
+        selectedMealId={selectedMealId}
+        onSelect={setSelectedMealId}
+      />
 
       {/* Camera scanner */}
       {scanning && !loading && (
@@ -454,6 +441,133 @@ function detectCurrentMeal(meals: CachedMeal[]): number | undefined {
     return sh * 60 + sm - EARLY_GRACE > nowMin
   })
   return upcoming?.id
+}
+
+function mealTypeShort(type: number) {
+  return type === 1 ? '早餐' : type === 2 ? '午餐' : '晚餐'
+}
+
+function MealPillBar({
+  meals,
+  selectedMealId,
+  onSelect,
+}: {
+  meals: CachedMeal[]
+  selectedMealId: number | undefined
+  onSelect: (id: number | undefined) => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  const autoDetected = useMemo(() => detectCurrentMeal(meals), [meals])
+  const effectiveId = selectedMealId ?? autoDetected
+  const isAuto = selectedMealId === undefined
+  const activeMeal = meals.find((m) => m.id === effectiveId)
+
+  if (meals.length === 0) return null
+
+  return (
+    <>
+      {/* Compact single-line bar */}
+      <button
+        onClick={() => setOpen(true)}
+        className="w-full flex items-center gap-2 px-4 border-b border-blue-800 bg-blue-950 active:bg-blue-900 transition-colors"
+        style={{ minHeight: 48 }}
+      >
+        {isAuto && (
+          <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500 text-white leading-none">自动</span>
+        )}
+        {activeMeal ? (
+          <span className="flex-1 text-left text-sm font-semibold text-white">
+            {mealTypeShort(activeMeal.type)}
+            <span className="font-normal text-blue-300 ml-2">
+              {activeMeal.startTime.slice(0, 5)}–{activeMeal.endTime.slice(0, 5)}
+            </span>
+            <span className="font-normal text-blue-400 ml-2 text-xs">{formatDate(activeMeal.date)}</span>
+          </span>
+        ) : (
+          <span className="flex-1 text-left text-sm text-blue-400">选择餐次 Choose meal</span>
+        )}
+        <span className="shrink-0 text-blue-400 text-xs">▾</span>
+      </button>
+
+      {/* Bottom sheet overlay */}
+      {open && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
+
+          {/* Sheet */}
+          <div className="relative bg-blue-950 rounded-t-2xl max-h-[70vh] flex flex-col shadow-2xl">
+            {/* Handle + header */}
+            <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-blue-800">
+              <span className="text-sm font-semibold text-white">选择餐次 Choose meal</span>
+              <button onClick={() => setOpen(false)} className="text-blue-400 text-xl leading-none px-1">✕</button>
+            </div>
+
+            {/* Scrollable meal list grouped by date */}
+            <div className="overflow-y-auto flex-1 px-4 py-3 space-y-5">
+              {groupByDate(meals).map(({ date, meals: dayMeals }) => {
+                const now = new Date()
+                const todayStr = [
+                  now.getFullYear(),
+                  String(now.getMonth() + 1).padStart(2, '0'),
+                  String(now.getDate()).padStart(2, '0'),
+                ].join('-')
+                const isToday = date === todayStr
+                return (
+                  <div key={date}>
+                    <div className="text-xs text-blue-400 mb-2 flex items-center gap-2">
+                      {formatDate(date)}
+                      {isToday && <span className="px-1.5 py-0.5 rounded-full bg-blue-700 text-blue-200 text-[10px] font-semibold">今天</span>}
+                    </div>
+                    <div className="flex gap-2">
+                      {dayMeals.map((m) => {
+                        const isSelected = m.id === effectiveId
+                        const isAutoSel = isAuto && m.id === autoDetected
+                        return (
+                          <button
+                            key={m.id}
+                            onClick={() => {
+                              onSelect(m.id === selectedMealId ? undefined : m.id)
+                              setOpen(false)
+                            }}
+                            className={[
+                              'flex-1 rounded-xl py-3 px-2 flex flex-col items-center gap-1 transition-all active:scale-95',
+                              isSelected
+                                ? 'bg-blue-500 text-white shadow-lg shadow-blue-900/50'
+                                : 'bg-blue-900 text-blue-300 border border-blue-800',
+                            ].join(' ')}
+                          >
+                            <span className="text-base font-bold leading-none">{mealTypeShort(m.type)}</span>
+                            <span className="text-xs opacity-75 leading-none">{m.startTime.slice(0, 5)}</span>
+                            {isAutoSel && (
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-300 text-blue-950 leading-none">自动</span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Reset to auto-detect */}
+            {!isAuto && (
+              <div className="px-4 py-3 border-t border-blue-800">
+                <button
+                  onClick={() => { onSelect(undefined); setOpen(false) }}
+                  className="w-full py-2.5 rounded-xl bg-blue-900 text-blue-300 text-sm border border-blue-700 active:bg-blue-800"
+                >
+                  重置自动检测 Reset to auto-detect
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  )
 }
 
 async function buildMealPlans(
