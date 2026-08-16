@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import QrScanner from '../components/QrScanner'
 import { db, lookupByUid, queueScan, type CachedMeal, type CachedRegisterMeal } from '../db/localDb'
@@ -457,11 +457,21 @@ function MealPillBar({
   onSelect: (id: number | undefined) => void
 }) {
   const [open, setOpen] = useState(false)
+  const hasAutoOpened = useRef(false)
 
   const autoDetected = useMemo(() => detectCurrentMeal(meals), [meals])
+
   const effectiveId = selectedMealId ?? autoDetected
   const isAuto = selectedMealId === undefined
   const activeMeal = meals.find((m) => m.id === effectiveId)
+
+  // Auto-open the picker when the tab is focused and no meal can be detected
+  useEffect(() => {
+    if (!hasAutoOpened.current && meals.length > 0 && effectiveId === undefined) {
+      hasAutoOpened.current = true
+      setOpen(true)
+    }
+  }, [meals.length, effectiveId])
 
   if (meals.length === 0) return null
 
