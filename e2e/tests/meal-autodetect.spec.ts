@@ -66,15 +66,14 @@ test.describe('Meal auto-detection', () => {
     await expectMealLabel(page, '午餐 Lunch')
   })
 
-  test('3.5 — manual dropdown override → selected meal respected, not auto-detected', async ({ page }) => {
+  test('3.5 — manual override via bottom sheet → selected meal respected, not auto-detected', async ({ page }) => {
     await mockCurrentTime(page, '12:30') // lunch would be auto-detected
     await mockSyncEndpoints(page, OPTS)
     await gotoAndSync(page)
 
-    // Wait for useLiveQuery to populate the dropdown (options are hidden inside a closed <select>)
-    await page.locator('select option', { hasText: '晚餐 Dinner' }).waitFor({ state: 'attached', timeout: 5_000 })
-    const dinnerOption = await page.locator('select option', { hasText: '晚餐 Dinner' }).getAttribute('value')
-    await page.locator('select').selectOption(dinnerOption!)
+    // Open the meal bottom sheet and pick Dinner
+    await page.locator('button', { hasText: '选择餐次' }).click()
+    await page.locator('button', { hasText: '晚餐' }).first().click()
 
     await scanU001(page)
     // Should show Dinner, not the auto-detected Lunch
