@@ -469,6 +469,7 @@ function MealPillBar({
     <>
       {/* Compact single-line bar */}
       <button
+        data-testid="meal-bar"
         onClick={() => setOpen(true)}
         className="w-full flex items-center gap-2 px-4 border-b border-blue-800 bg-blue-950 active:bg-blue-900 transition-colors"
         style={{ minHeight: 48 }}
