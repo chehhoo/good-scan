@@ -72,7 +72,7 @@ test.describe('Meal auto-detection', () => {
     await gotoAndSync(page)
 
     // Open the meal bottom sheet and pick Dinner
-    await page.locator('button', { hasText: '选择餐次' }).click()
+    await page.getByTestId('meal-bar').click()
     await page.locator('button', { hasText: '晚餐' }).first().click()
 
     await scanU001(page)
