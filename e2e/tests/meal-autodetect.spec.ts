@@ -66,6 +66,19 @@ test.describe('Meal auto-detection', () => {
     await expectMealLabel(page, '午餐 Lunch')
   })
 
+  test('3.6 — no meal detectable → bottom sheet opens automatically', async ({ page }) => {
+    await mockCurrentTime(page, '22:00') // after dinner late grace (20:30) — nothing detectable
+    await mockSyncEndpoints(page, OPTS)
+    await gotoAndSync(page)
+
+    // Bottom sheet should open without any user interaction
+    // Target the sheet header (font-semibold white), not the pill bar placeholder (blue-400)
+    await expect(page.locator('span.font-semibold.text-white', { hasText: '选择餐次 Choose meal' })).toBeVisible({ timeout: 5_000 })
+    // Both meals shown as options in the sheet
+    await expect(page.locator('button', { hasText: '午餐' }).first()).toBeVisible()
+    await expect(page.locator('button', { hasText: '晚餐' }).first()).toBeVisible()
+  })
+
   test('3.5 — manual override via bottom sheet → selected meal respected, not auto-detected', async ({ page }) => {
     await mockCurrentTime(page, '12:30') // lunch would be auto-detected
     await mockSyncEndpoints(page, OPTS)
