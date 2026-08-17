@@ -26,10 +26,10 @@ export async function mockSyncEndpoints(
   overrides: { meals?: unknown[]; registerMeals?: unknown[] } = {}
 ) {
   await page.route('**/api/auth/volunteer', (r) =>
-    r.fulfill({ json: { token: TEST_TOKEN } })
+    r.fulfill({ json: { token: TEST_TOKEN, eventId: 1, eventName: 'E2E Test Camp' } })
   )
   await page.route('**/api/register/event-info', (r) =>
-    r.fulfill({ json: { name: 'E2E 测试营', nameEng: 'E2E Test Camp' } })
+    r.fulfill({ json: { id: 1, name: 'E2E 测试营', nameEng: 'E2E Test Camp' } })
   )
   await page.route('**/api/scan/sync/profiles', (r) =>
     r.fulfill({ json: PROFILES })
