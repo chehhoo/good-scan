@@ -5,7 +5,10 @@ const AUTH_FILE = 'e2e/fixtures/.auth.json'
 
 setup('authenticate as volunteer', async ({ page }) => {
   await page.route('**/api/auth/volunteer', (route) =>
-    route.fulfill({ json: { token: TEST_TOKEN } })
+    route.fulfill({ json: { token: TEST_TOKEN, eventId: 1, eventName: 'E2E Test Camp' } })
+  )
+  await page.route('**/api/register/event-info', (route) =>
+    route.fulfill({ json: { id: 1, name: 'E2E 测试营', nameEng: 'E2E Test Camp' } })
   )
 
   await page.goto('/')
