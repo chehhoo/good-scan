@@ -122,9 +122,17 @@ export default function App() {
         for (const v of voided.data) {
           await db.scanQueue.where('[uid+mealId]').equals([v.uid, v.mealId]).delete()
         }
-        // Merge server scan records: delete all synced entries (filter avoids boolean/int mismatch), insert fresh ones
-        const syncedIds = await db.scanQueue.filter((s) => s.synced === true).primaryKeys()
-        await db.scanQueue.bulkDelete(syncedIds as number[])
+        // Merge server scan records: delete all synced entries (filter avoids boolean/int mismatch), insert fresh ones.
+        // Also drop any still-unsynced local entry the server now confirms — normally the
+        // real-time scan path marks its own row synced on success (see MealScan.tsx), but if
+        // that never completes (app closed/backgrounded mid-request) the row would otherwise
+        // stay "synced: false" forever while this same pickup gets re-added as a synced copy,
+        // double-counting one real scan as two rows in household pickup history/quota.
+        const confirmedKeys = new Set(serverScans.data.map((s) => `${s.uid}:${s.mealId}`))
+        const staleIds = await db.scanQueue
+          .filter((s) => s.synced === true || confirmedKeys.has(`${s.uid}:${s.mealId}`))
+          .primaryKeys()
+        await db.scanQueue.bulkDelete(staleIds as number[])
         await db.scanQueue.bulkAdd(
           serverScans.data.map((s) => ({ uid: s.uid, mealId: s.mealId, scannedAt: s.scannedAt, synced: true as const }))
         )
