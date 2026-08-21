@@ -13,7 +13,7 @@ interface PersonResult {
   registerMeals: CachedRegisterMeal[]
   meals: CachedMeal[]
   takenCounts: Record<number, number>
-  pickupRecords: Record<number, string[]>
+  pickupRecords: Record<number, { name: string; scannedAt: string }[]>
   lastScanAt: string | null
 }
 
@@ -86,15 +86,15 @@ export default function MealInfo({ lastScannedUid, refreshKey, onSync }: Props) 
         setPersonError('没有找到此人 Person not found')
         return
       }
-      const { profile, registerMeals, meals: personMeals, takenCounts } = local
+      const { profile, registerMeals, meals: personMeals, takenCounts, pickupsByMeal } = local
       const name = profile.cnName || `${profile.firstName} ${profile.lastName}`
-      const pickupRecords: Record<number, string[]> = {}
+      // Household-wide records (meal entitlement/quota is shared across the household —
+      // see lookupByUid), so this shows who in the family already picked up, not just uid.
+      const pickupRecords: Record<number, { name: string; scannedAt: string }[]> = {}
       let lastScanAt: string | null = null
       for (const rm of registerMeals) {
-        const entries = await db.scanQueue
-          .where('[uid+mealId]').equals([uid, rm.mealId])
-          .toArray()
-        pickupRecords[rm.mealId] = entries.map((e) => e.scannedAt)
+        const entries = pickupsByMeal[rm.mealId] ?? []
+        pickupRecords[rm.mealId] = entries.map((e) => ({ name: e.name, scannedAt: e.scannedAt }))
         for (const e of entries) {
           if (!lastScanAt || e.scannedAt > lastScanAt) lastScanAt = e.scannedAt
         }
@@ -278,8 +278,8 @@ export default function MealInfo({ lastScannedUid, refreshKey, onSync }: Props) 
                         </span>
                       </td>
                       <td className="px-3 py-2 text-xs text-gray-400">
-                        {records.length === 0 ? '—' : records.map((iso, i) => (
-                          <div key={i}>{prettyTime(iso)}</div>
+                        {records.length === 0 ? '—' : records.map((r, i) => (
+                          <div key={i}>{r.name} · {prettyTime(r.scannedAt)}</div>
                         ))}
                       </td>
                     </tr>

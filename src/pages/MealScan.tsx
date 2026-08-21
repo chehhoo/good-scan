@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import QrScanner from '../components/QrScanner'
-import { db, lookupByUid, queueScan, type CachedMeal, type CachedRegisterMeal } from '../db/localDb'
+import { db, lookupByUid, queueScan, markSynced, type CachedMeal, type CachedRegisterMeal } from '../db/localDb'
 import { scanApi } from '../api/client'
 
 interface PickupRecord {
@@ -64,7 +64,7 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
         return
       }
 
-      const { profile, registerMeals, meals: personMeals, takenCounts } = local
+      const { profile, registerMeals, meals: personMeals, takenCounts, pickupsByMeal } = local
       const name = profile.cnName || `${profile.firstName} ${profile.lastName}`
       onScan?.(uid)
 
@@ -90,7 +90,7 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
         setResult({
           name, uid, mealId, mealLabel, mealOrdered: 0, mealTaken: taken, mealRemaining: 0,
           status: 'error', errorMessage: '沒有订餐记录 No meal order',
-          trackers: [], mealPlans: await buildMealPlans(registerMeals, personMeals, takenCounts, uid, name),
+          trackers: [], mealPlans: await buildMealPlans(registerMeals, personMeals, takenCounts, pickupsByMeal),
         })
         setLoading(false)
         return
@@ -99,20 +99,32 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
       const isExceeded = taken >= ordered
       const newTaken = isExceeded ? taken : taken + 1
 
+      let localQueueId: number | undefined
       if (!isExceeded) {
-        await queueScan(uid, mealId)
+        localQueueId = await queueScan(uid, mealId)
       }
 
       if (navigator.onLine && !isExceeded) {
-        scanApi.scan(uid, mealId).catch(() => {})
+        // Mark this exact local row synced on success so the periodic cache
+        // warm-up (which re-downloads confirmed server scans) doesn't insert a
+        // second copy of the same pickup — leaving the original row forever
+        // "synced: false" caused every online scan to be double-counted once
+        // the warm-up cycle ran, inflating household pickup history and quota.
+        scanApi.scan(uid, mealId)
+          .then(() => { if (localQueueId != null) markSynced(localQueueId) })
+          .catch(() => {})
       }
 
-      const queueEntries = await db.scanQueue
-        .where('[uid+mealId]').equals([uid, mealId])
-        .toArray()
-      const trackers: PickupRecord[] = queueEntries.map((e) => ({ name, scannedAt: e.scannedAt }))
+      // Household-wide pickup list for this meal, including the scan just queued above.
+      const existingPickups = pickupsByMeal[mealId] ?? []
+      const trackers: PickupRecord[] = isExceeded
+        ? existingPickups.map((p) => ({ name: p.name, scannedAt: p.scannedAt }))
+        : [...existingPickups, { name, scannedAt: new Date().toISOString() }].map((p) => ({ name: p.name, scannedAt: p.scannedAt }))
 
       const updatedTakenCounts = { ...takenCounts, [mealId]: newTaken }
+      const updatedPickupsByMeal = isExceeded
+        ? pickupsByMeal
+        : { ...pickupsByMeal, [mealId]: [...existingPickups, { uid, name, scannedAt: new Date().toISOString() }] }
 
       setResult({
         name, uid, mealId, mealLabel,
@@ -121,7 +133,7 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
         mealRemaining: Math.max(0, ordered - newTaken),
         status: isExceeded ? 'exceeded' : 'ok',
         trackers,
-        mealPlans: await buildMealPlans(registerMeals, personMeals, updatedTakenCounts, uid, name),
+        mealPlans: await buildMealPlans(registerMeals, personMeals, updatedTakenCounts, updatedPickupsByMeal),
       })
     } catch (e) {
       setResult({
@@ -585,18 +597,15 @@ async function buildMealPlans(
   registerMeals: import('../db/localDb').CachedRegisterMeal[],
   personMeals: CachedMeal[],
   takenCounts: Record<number, number>,
-  uid: string,
-  name: string,
+  pickupsByMeal: Record<number, { uid: string; name: string; scannedAt: string }[]>,
 ): Promise<MealPlanRow[]> {
   const rows: MealPlanRow[] = []
   for (const rm of registerMeals) {
     const meal = personMeals.find((m) => m.id === rm.mealId)
     if (!meal) continue
     const taken = takenCounts[rm.mealId] ?? 0
-    const queueEntries = await db.scanQueue
-      .where('[uid+mealId]').equals([uid, rm.mealId])
-      .toArray()
-    const pickupRecords: PickupRecord[] = queueEntries.map((e) => ({ name, scannedAt: e.scannedAt }))
+    const pickupRecords: PickupRecord[] = (pickupsByMeal[rm.mealId] ?? [])
+      .map((p) => ({ name: p.name, scannedAt: p.scannedAt }))
     rows.push({ meal, rm, ordered: rm.qty, taken, pickupRecords })
   }
   return rows.sort((a, b) => a.meal.date.localeCompare(b.meal.date) || a.meal.type - b.meal.type)
