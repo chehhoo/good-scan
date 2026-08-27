@@ -1,8 +1,17 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import { TEST_TOKEN } from '../fixtures/test-data'
+import { mockSyncEndpoints } from '../fixtures/mock-api'
 
 // These tests need a clean (unauthenticated) context
 test.use({ storageState: { cookies: [], origins: [] } })
+
+// Mock all API endpoints so a running local good-api doesn't interfere
+async function mockAll(page: Page) {
+  await page.route('**/api/auth/volunteer', (r) =>
+    r.fulfill({ json: { token: TEST_TOKEN, eventId: 1, eventName: 'E2E Test Camp' } })
+  )
+  await mockSyncEndpoints(page)  // includes event-info, all sync endpoints
+}
 
 test.describe('Login page', () => {
   test('shows branding and access code input', async ({ page }) => {
@@ -14,15 +23,12 @@ test.describe('Login page', () => {
   })
 
   test('valid access code logs in and shows app', async ({ page }) => {
-    await page.route('**/api/auth/volunteer', (r) =>
-      r.fulfill({ json: { token: TEST_TOKEN } })
-    )
+    await mockAll(page)
     await page.goto('/')
 
     await page.locator('input[type="text"]').fill('GOSPEL2026')
     await page.getByRole('button', { name: /登录/ }).click()
 
-    // Tab bar appears as soon as token is set — sync failures are silently ignored
     await page.waitForSelector('text=餐食 Meal', { timeout: 10_000 })
   })
 
@@ -39,9 +45,7 @@ test.describe('Login page', () => {
   })
 
   test('enter key submits the form', async ({ page }) => {
-    await page.route('**/api/auth/volunteer', (r) =>
-      r.fulfill({ json: { token: TEST_TOKEN } })
-    )
+    await mockAll(page)
     await page.goto('/')
 
     await page.locator('input[type="text"]').fill('GOSPEL2026')
@@ -51,9 +55,7 @@ test.describe('Login page', () => {
   })
 
   test('?code= in URL auto-submits', async ({ page }) => {
-    await page.route('**/api/auth/volunteer', (r) =>
-      r.fulfill({ json: { token: TEST_TOKEN } })
-    )
+    await mockAll(page)
     await page.goto('/?code=GOSPEL2026')
 
     await page.waitForSelector('text=餐食 Meal', { timeout: 10_000 })
