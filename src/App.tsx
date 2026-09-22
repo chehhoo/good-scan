@@ -219,8 +219,8 @@ export default function App() {
 
       {/* Page content */}
       <main className="flex-1 overflow-y-auto">
-        {tab === 'meal' && <MealScan manualEntryEnabled={manualEntryEnabled} onScan={setLastScannedUid} />}
-        {tab === 'checkin' && <CheckIn manualEntryEnabled={manualEntryEnabled} />}
+        {tab === 'meal' && <MealScan manualEntryEnabled={manualEntryEnabled} isSynced={lastSyncAt !== null && Date.now() - lastSyncAt.getTime() <= 30 * 60 * 1000} onScan={setLastScannedUid} />}
+        {tab === 'checkin' && <CheckIn manualEntryEnabled={manualEntryEnabled} isSynced={lastSyncAt !== null && Date.now() - lastSyncAt.getTime() <= 30 * 60 * 1000} />}
         {tab === 'info' && <MealInfo lastScannedUid={lastScannedUid} refreshKey={infoRefreshKey} onSync={warmUpCache} />}
       </main>
     </div>
