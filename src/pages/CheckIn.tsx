@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react'
 import QrScanner from '../components/QrScanner'
 import { db, lookupByUid } from '../db/localDb'
 import { syncApi } from '../api/client'
+import { playSuccess, playExceeded, playError } from '../utils/sound'
 
 interface CheckInResult {
   uid: string
@@ -10,7 +11,7 @@ interface CheckInResult {
   checkinTime: string   // ISO string
 }
 
-export default function CheckIn({ manualEntryEnabled }: { manualEntryEnabled: boolean }) {
+export default function CheckIn({ manualEntryEnabled, isSynced }: { manualEntryEnabled: boolean; isSynced: boolean }) {
   const [scanning, setScanning] = useState(true)
   const [result, setResult] = useState<CheckInResult | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -31,6 +32,7 @@ export default function CheckIn({ manualEntryEnabled }: { manualEntryEnabled: bo
       // Check local cache first for name
       const local = await lookupByUid(uid)
       if (!local) {
+        playError()
         setError('未找到此人 Person not found — 请先同步 Please sync first')
         setLoading(false)
         return
@@ -41,6 +43,7 @@ export default function CheckIn({ manualEntryEnabled }: { manualEntryEnabled: bo
       // Always call API — it's the source of truth for check-in status
       const res = await syncApi.checkIn(uid)
       if (!res.data.success) {
+        playError()
         setError(res.data.error ?? '报到失败 Check-in failed')
         setLoading(false)
         return
@@ -49,6 +52,7 @@ export default function CheckIn({ manualEntryEnabled }: { manualEntryEnabled: bo
       // Update local cache
       await db.profiles.update(profile.id, { checkinTime: res.data.checkinTime })
 
+      if (res.data.alreadyCheckedIn) playExceeded(); else playSuccess()
       setResult({
         uid,
         name: res.data.name || name,
@@ -56,6 +60,7 @@ export default function CheckIn({ manualEntryEnabled }: { manualEntryEnabled: bo
         checkinTime: res.data.checkinTime,
       })
     } catch (e) {
+      playError()
       setError('系统错误 System error: ' + String(e))
     } finally {
       setLoading(false)
@@ -98,6 +103,17 @@ export default function CheckIn({ manualEntryEnabled }: { manualEntryEnabled: bo
     setScanning(true)
     setManualUid('')
     setTimeout(() => manualInputRef.current?.focus(), 100)
+  }
+
+  if (!isSynced) {
+    return (
+      <div className="min-h-full flex flex-col items-center justify-center gap-4 p-6 text-center">
+        <div className="text-5xl">🔒</div>
+        <p className="text-xl font-bold">未同步 Not Synced</p>
+        <p className="text-blue-300 text-sm">扫描前请先同步数据<br />Please sync before scanning</p>
+        <p className="text-blue-500 text-xs">点击右上角状态点同步<br />Tap the status dot to sync</p>
+      </div>
+    )
   }
 
   return (

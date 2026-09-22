@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import QrScanner from '../components/QrScanner'
 import { db, lookupByUid, queueScan, markSynced, type CachedMeal, type CachedRegisterMeal } from '../db/localDb'
 import { scanApi } from '../api/client'
+import { playSuccess, playExceeded, playError } from '../utils/sound'
 
 interface PickupRecord {
   name: string
@@ -31,7 +32,7 @@ interface ScanResult {
   mealPlans: MealPlanRow[]
 }
 
-export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEnabled: boolean; onScan?: (uid: string) => void }) {
+export default function MealScan({ manualEntryEnabled, isSynced, onScan }: { manualEntryEnabled: boolean; isSynced: boolean; onScan?: (uid: string) => void }) {
   const [scanning, setScanning] = useState(true)
   const [result, setResult] = useState<ScanResult | null>(null)
   const meals = useLiveQuery(
@@ -55,6 +56,7 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
       const local = await lookupByUid(uid)
 
       if (!local) {
+        playError()
         setResult({
           name: uid, uid, mealId: 0, mealLabel: '', mealOrdered: 0, mealTaken: 0, mealRemaining: 0,
           status: 'error', errorMessage: '没有这个注册记录 UID not found',
@@ -71,6 +73,7 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
       const allMeals = await db.meals.toArray()
       const mealId = selectedMealId ?? detectCurrentMeal(allMeals)
       if (!mealId) {
+        playError()
         setResult({
           name, uid, mealId: 0, mealLabel: '', mealOrdered: 0, mealTaken: 0, mealRemaining: 0,
           status: 'error', errorMessage: '无当前餐 No active meal',
@@ -87,6 +90,7 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
       const taken = takenCounts[mealId] ?? 0
 
       if (ordered === 0) {
+        playError()
         setResult({
           name, uid, mealId, mealLabel, mealOrdered: 0, mealTaken: taken, mealRemaining: 0,
           status: 'error', errorMessage: '沒有订餐记录 No meal order',
@@ -126,6 +130,7 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
         ? pickupsByMeal
         : { ...pickupsByMeal, [mealId]: [...existingPickups, { uid, name, scannedAt: new Date().toISOString() }] }
 
+      if (isExceeded) playExceeded(); else playSuccess()
       setResult({
         name, uid, mealId, mealLabel,
         mealOrdered: ordered,
@@ -136,6 +141,7 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
         mealPlans: await buildMealPlans(registerMeals, personMeals, updatedTakenCounts, updatedPickupsByMeal),
       })
     } catch (e) {
+      playError()
       setResult({
         name: uid, uid, mealId: 0, mealLabel: '', mealOrdered: 0, mealTaken: 0, mealRemaining: 0,
         status: 'error', errorMessage: '系統问题 System error: ' + String(e),
@@ -188,6 +194,17 @@ export default function MealScan({ manualEntryEnabled, onScan }: { manualEntryEn
     exceeded: { bg: 'bg-amber-950',  border: 'border-amber-700',  icon: '⚠', iconBg: 'bg-amber-500',   text: 'text-amber-300',   zh: '抱歉！已领了全部', en: 'QUOTA EXCEEDED' },
     error:    { bg: 'bg-red-950',    border: 'border-red-800',    icon: '✗', iconBg: 'bg-red-600',     text: 'text-red-300',     zh: result.errorMessage ?? '错误', en: 'ERROR' },
   }[result.status] : null
+
+  if (!isSynced) {
+    return (
+      <div className="min-h-full flex flex-col items-center justify-center gap-4 p-6 text-center">
+        <div className="text-5xl">🔒</div>
+        <p className="text-xl font-bold">未同步 Not Synced</p>
+        <p className="text-blue-300 text-sm">扫描前请先同步数据<br />Please sync before scanning</p>
+        <p className="text-blue-500 text-xs">点击右上角状态点同步<br />Tap the status dot to sync</p>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-full flex flex-col">
