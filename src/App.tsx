@@ -22,6 +22,7 @@ export default function App() {
   const [infoRefreshKey, setInfoRefreshKey] = useState(0)
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const cacheIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const warmingUp = useRef(false)
   // Manual entry: always on in dev; toggle by tapping version badge 5× in prod
   const [manualEntryEnabled, setManualEntryEnabled] = useState<boolean>(
@@ -32,7 +33,7 @@ export default function App() {
 
   // Track online/offline status — re-sync cache immediately on reconnect
   useEffect(() => {
-    const onOnline = () => { setOnline(true); warmUpCache() }
+    const onOnline = () => { checkReachability(); warmUpCache() }
     const onOffline = () => setOnline(false)
     window.addEventListener('online', onOnline)
     window.addEventListener('offline', onOffline)
@@ -64,6 +65,16 @@ export default function App() {
     setPendingCount(pending.length)
   }
 
+  // Ping the server to confirm actual reachability (not just navigator.onLine)
+  async function checkReachability() {
+    try {
+      await eventApi.getActive()
+      setOnline(true)
+    } catch {
+      setOnline(false)
+    }
+  }
+
   // Initial cache warm-up + periodic sync
   useEffect(() => {
     warmUpCache()
@@ -71,6 +82,7 @@ export default function App() {
     const stored = localStorage.getItem('lastCacheSyncAt')
     if (stored) setLastSyncAt(new Date(stored))
     eventApi.getActive().then((event) => {
+      setOnline(true)
       setActiveEvent(event)
       // If the active event has changed since login, force re-login with the new code
       const tokenEventId = localStorage.getItem('tokenEventId')
@@ -79,7 +91,7 @@ export default function App() {
         localStorage.removeItem('tokenEventId')
         setToken(null)
       }
-    }).catch(() => {})
+    }).catch(() => { setOnline(false) })
 
     // Flush scan queue every 10s
     syncIntervalRef.current = setInterval(() => {
@@ -92,9 +104,13 @@ export default function App() {
       if (navigator.onLine) warmUpCache()
     }, 5 * 60_000)
 
+    // Ping server every 30s to keep reachability status accurate
+    pingIntervalRef.current = setInterval(checkReachability, 30_000)
+
     return () => {
       if (syncIntervalRef.current) clearInterval(syncIntervalRef.current)
       if (cacheIntervalRef.current) clearInterval(cacheIntervalRef.current)
+      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current)
     }
   }, [])
 
@@ -174,7 +190,7 @@ export default function App() {
   }
 
   if (!token) {
-    return <LoginPage onLogin={setToken} />
+    return <LoginPage onLogin={(t) => { setToken(t); warmUpCache() }} />
   }
 
   return (
