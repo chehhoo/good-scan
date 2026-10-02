@@ -79,6 +79,8 @@ export default function LoginPage({ onLogin }: Props) {
         <br />
         Contact event admin for the access code
       </p>
+
+      <span className="text-blue-700 text-xs select-none">v{__APP_VERSION__}</span>
     </div>
   )
 }
