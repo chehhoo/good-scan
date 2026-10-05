@@ -32,7 +32,11 @@ interface ScanResult {
   mealPlans: MealPlanRow[]
 }
 
-export default function MealScan({ manualEntryEnabled, isSynced, onScan }: { manualEntryEnabled: boolean; isSynced: boolean; onScan?: (uid: string) => void }) {
+export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCacheMiss }: {
+  manualEntryEnabled: boolean; isSynced: boolean; onScan?: (uid: string) => void
+  /** Refresh the offline cache when a scanned person isn't in it (e.g. a just-registered walk-in) */
+  onCacheMiss?: () => Promise<void>
+}) {
   const [scanning, setScanning] = useState(true)
   const [result, setResult] = useState<ScanResult | null>(null)
   const meals = useLiveQuery(
@@ -53,7 +57,11 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan }: { man
     setLoading(true)
 
     try {
-      const local = await lookupByUid(uid)
+      let local = await lookupByUid(uid)
+      if (!local && onCacheMiss) {
+        await onCacheMiss()
+        local = await lookupByUid(uid)
+      }
 
       if (!local) {
         playError()
@@ -150,7 +158,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan }: { man
     } finally {
       setLoading(false)
     }
-  }, [loading, selectedMealId])
+  }, [loading, selectedMealId, onCacheMiss])
 
   const startVoice = () => {
     const SpeechRecognition = window.SpeechRecognition ?? (window as any).webkitSpeechRecognition
