@@ -67,7 +67,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
         playError()
         setResult({
           name: uid, uid, mealId: 0, mealLabel: '', mealOrdered: 0, mealTaken: 0, mealRemaining: 0,
-          status: 'error', errorMessage: '没有这个注册记录 UID not found',
+          status: 'error', errorMessage: '沒有這個註冊記錄 UID not found',
           trackers: [], mealPlans: [],
         })
         setLoading(false)
@@ -84,7 +84,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
         playError()
         setResult({
           name, uid, mealId: 0, mealLabel: '', mealOrdered: 0, mealTaken: 0, mealRemaining: 0,
-          status: 'error', errorMessage: '无当前餐 No active meal',
+          status: 'error', errorMessage: '無當前餐 No active meal',
           trackers: [], mealPlans: [],
         })
         setLoading(false)
@@ -101,7 +101,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
         playError()
         setResult({
           name, uid, mealId, mealLabel, mealOrdered: 0, mealTaken: taken, mealRemaining: 0,
-          status: 'error', errorMessage: '沒有订餐记录 No meal order',
+          status: 'error', errorMessage: '沒有訂餐記錄 No meal order',
           trackers: [], mealPlans: await buildMealPlans(registerMeals, personMeals, takenCounts, pickupsByMeal),
         })
         setLoading(false)
@@ -152,7 +152,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
       playError()
       setResult({
         name: uid, uid, mealId: 0, mealLabel: '', mealOrdered: 0, mealTaken: 0, mealRemaining: 0,
-        status: 'error', errorMessage: '系統问题 System error: ' + String(e),
+        status: 'error', errorMessage: '系統問題 System error: ' + String(e),
         trackers: [], mealPlans: [],
       })
     } finally {
@@ -163,12 +163,12 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
   const startVoice = () => {
     const SpeechRecognition = window.SpeechRecognition ?? (window as any).webkitSpeechRecognition
     if (!SpeechRecognition) {
-      alert('此浏览器不支持语音识别 Voice recognition not supported')
+      alert('此瀏覽器不支援語音識別 Voice recognition not supported')
       return
     }
     if (recognitionRef.current) { recognitionRef.current.abort(); recognitionRef.current = null }
     const rec = new SpeechRecognition()
-    rec.lang = 'zh-CN'
+    rec.lang = 'zh-TW'
     rec.interimResults = false
     rec.maxAlternatives = 1
     recognitionRef.current = rec
@@ -198,9 +198,9 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
   }
 
   const statusConfig = result ? {
-    ok:       { bg: 'bg-green-900',  border: 'border-green-700',  icon: '✓', iconBg: 'bg-green-500',   text: 'text-green-300',   zh: '成功！请拿饭盒',   en: 'MEAL SERVED' },
-    exceeded: { bg: 'bg-amber-950',  border: 'border-amber-700',  icon: '⚠', iconBg: 'bg-amber-500',   text: 'text-amber-300',   zh: '抱歉！已领了全部', en: 'QUOTA EXCEEDED' },
-    error:    { bg: 'bg-red-950',    border: 'border-red-800',    icon: '✗', iconBg: 'bg-red-600',     text: 'text-red-300',     zh: result.errorMessage ?? '错误', en: 'ERROR' },
+    ok:       { bg: 'bg-green-900',  border: 'border-green-700',  icon: '✓', iconBg: 'bg-green-500',   text: 'text-green-300',   zh: '成功！請拿飯盒',   en: 'MEAL SERVED' },
+    exceeded: { bg: 'bg-amber-950',  border: 'border-amber-700',  icon: '⚠', iconBg: 'bg-amber-500',   text: 'text-amber-300',   zh: '抱歉！已領了全部', en: 'QUOTA EXCEEDED' },
+    error:    { bg: 'bg-red-950',    border: 'border-red-800',    icon: '✗', iconBg: 'bg-red-600',     text: 'text-red-300',     zh: result.errorMessage ?? '錯誤', en: 'ERROR' },
   }[result.status] : null
 
   if (!isSynced) {
@@ -208,8 +208,8 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
       <div className="min-h-full flex flex-col items-center justify-center gap-4 p-6 text-center">
         <div className="text-5xl">🔒</div>
         <p className="text-xl font-bold">未同步 Not Synced</p>
-        <p className="text-blue-300 text-sm">扫描前请先同步数据<br />Please sync before scanning</p>
-        <p className="text-blue-500 text-xs">点击右上角状态点同步<br />Tap the status dot to sync</p>
+        <p className="text-blue-300 text-sm">掃描前請先同步資料<br />Please sync before scanning</p>
+        <p className="text-blue-500 text-xs">點擊右上角狀態點同步<br />Tap the status dot to sync</p>
       </div>
     )
   }
@@ -233,7 +233,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
                 ref={manualInputRef}
                 type="text"
                 className="flex-1 bg-blue-900 border border-blue-700 rounded-lg px-3 py-2 text-sm font-mono placeholder-blue-500 focus:outline-none focus:border-blue-400"
-                placeholder="手动输入 Person ID"
+                placeholder="手動輸入 Person ID"
                 value={manualUid}
                 onChange={(e) => setManualUid(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submitManualUid()}
@@ -243,12 +243,12 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
                 disabled={!manualUid.trim()}
                 className="px-4 py-2 bg-blue-700 hover:bg-blue-600 active:bg-blue-800 disabled:opacity-40 rounded-lg text-sm font-semibold transition-colors"
               >
-                查询 Go
+                查詢 Go
               </button>
               <button
                 onClick={startVoice}
                 disabled={listening}
-                title="语音输入 Voice input"
+                title="語音輸入 Voice input"
                 className={`px-3 py-2 rounded-lg text-lg transition-colors ${listening ? 'bg-red-600 animate-pulse' : 'bg-blue-700 hover:bg-blue-600 active:bg-blue-800'}`}
               >
                 🎤
@@ -260,7 +260,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
 
       {loading && (
         <div className="flex items-center justify-center h-48 text-blue-300 text-lg animate-pulse">
-          查询中 Loading…
+          查詢中 Loading…
         </div>
       )}
 
@@ -307,11 +307,11 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
               {/* Supporting: Ordered + Taken */}
               <div className="flex flex-col justify-center px-5 gap-4">
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-xs text-blue-400 uppercase tracking-widest font-semibold">订了 Ordered</span>
+                  <span className="text-xs text-blue-400 uppercase tracking-widest font-semibold">訂了 Ordered</span>
                   <span className="text-2xl font-bold tabular-nums">{result.mealOrdered}</span>
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-xs text-blue-400 uppercase tracking-widest font-semibold">领了 Taken</span>
+                  <span className="text-xs text-blue-400 uppercase tracking-widest font-semibold">領了 Taken</span>
                   <span className="text-2xl font-bold tabular-nums">{result.mealTaken}</span>
                 </div>
               </div>
@@ -328,28 +328,28 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
           {/* Pickup history */}
           {result.trackers.length > 0 && (
             <div className="px-4 py-3 border-b border-blue-800 flex flex-col gap-2">
-              <span className="text-xs text-blue-400 uppercase tracking-widest font-semibold">领取记录 Pickup History</span>
+              <span className="text-xs text-blue-400 uppercase tracking-widest font-semibold">領取記錄 Pickup History</span>
               {result.trackers.map((t, i) => (
                 <div key={i} className="flex items-center gap-2 text-sm">
                   <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${result.status === 'ok' ? 'bg-green-400' : 'bg-amber-400'}`} />
-                  <span className="text-white font-medium">{t.name} 领了一盒</span>
+                  <span className="text-white font-medium">{t.name} 領了一盒</span>
                   <span className="ml-auto text-blue-500 text-xs tabular-nums">{prettyTime(t.scannedAt)}</span>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Meal plans table */}
-          {result.mealPlans.length > 0 && (
+          {/* Meal plans table — the 地點 column only when this event's meals have venues */}
+          {result.mealPlans.length > 0 && (() => { const showLocation = result.mealPlans.some(r => r.meal.location); return (
             <div className="overflow-x-auto border-b border-blue-800">
               <table className="w-full text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
                 <thead>
                   <tr className="bg-blue-950 text-blue-400 text-xs uppercase tracking-widest">
-                    <th className="px-3 py-2 text-left font-semibold">地点</th>
+                    {showLocation && <th className="px-3 py-2 text-left font-semibold">地點</th>}
                     <th className="px-3 py-2 text-left font-semibold">餐食</th>
-                    <th className="px-3 py-2 text-center font-semibold">订</th>
-                    <th className="px-3 py-2 text-center font-semibold">领</th>
-                    <th className="px-3 py-2 text-left font-semibold">记录</th>
+                    <th className="px-3 py-2 text-center font-semibold">訂</th>
+                    <th className="px-3 py-2 text-center font-semibold">領</th>
+                    <th className="px-3 py-2 text-left font-semibold">記錄</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-blue-900">
@@ -358,9 +358,11 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
                       key={row.meal.id}
                       className={row.meal.id === result.mealId ? 'bg-blue-900/50' : 'bg-blue-950/30'}
                     >
-                      <td className="px-3 py-2.5 align-middle">
-                        <LocationBadge locationId={row.meal.location} />
-                      </td>
+                      {showLocation && (
+                        <td className="px-3 py-2.5 align-middle">
+                          <LocationBadge locationId={row.meal.location} />
+                        </td>
+                      )}
                       <td className="px-3 py-2.5 align-middle">
                         <div className="font-semibold text-sm">{mealTypeLabel(row.meal.type)}</div>
                         <div className="text-blue-400 text-xs mt-0.5">{row.meal.date.slice(5)} · {row.meal.startTime.slice(0, 5)}</div>
@@ -383,7 +385,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
                 </tbody>
               </table>
             </div>
-          )}
+          ) })()}
 
           {/* Scan next */}
           <div className="px-4 py-4">
@@ -394,7 +396,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/>
               </svg>
-              扫描下一位 Scan Next
+              掃描下一位 Scan Next
             </button>
           </div>
         </div>
@@ -420,11 +422,11 @@ function mealTypeLabel(type: number) {
 function prettyTime(iso: string): string {
   const d = new Date(iso)
   const diffMin = Math.floor((Date.now() - d.getTime()) / 60000)
-  if (diffMin < 1)  return '刚刚'
-  if (diffMin < 60) return `${diffMin} 分钟前`
-  const hhmm = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+  if (diffMin < 1)  return '剛剛'
+  if (diffMin < 60) return `${diffMin} 分鐘前`
+  const hhmm = d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })
   if (new Date().toDateString() === d.toDateString()) return `今天 ${hhmm}`
-  return d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) + ' ' + hhmm
+  return d.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }) + ' ' + hhmm
 }
 
 function groupByDate(meals: CachedMeal[]): { date: string; meals: CachedMeal[] }[] {
@@ -437,7 +439,7 @@ function groupByDate(meals: CachedMeal[]): { date: string; meals: CachedMeal[] }
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })
+  return new Date(iso + 'T00:00:00').toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'short' })
 }
 
 /**
@@ -522,7 +524,7 @@ function MealPillBar({
         style={{ minHeight: 48 }}
       >
         {isAuto && (
-          <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500 text-white leading-none">自动</span>
+          <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500 text-white leading-none">自動</span>
         )}
         {activeMeal ? (
           <span className="flex-1 text-left text-sm font-semibold text-white">
@@ -533,7 +535,7 @@ function MealPillBar({
             <span className="font-normal text-blue-400 ml-2 text-xs">{formatDate(activeMeal.date)}</span>
           </span>
         ) : (
-          <span className="flex-1 text-left text-sm text-blue-400">选择餐次 Choose meal</span>
+          <span className="flex-1 text-left text-sm text-blue-400">選擇餐次 Choose meal</span>
         )}
         <span className="shrink-0 text-blue-400 text-xs">▾</span>
       </button>
@@ -548,7 +550,7 @@ function MealPillBar({
           <div className="relative bg-blue-950 rounded-t-2xl max-h-[70vh] flex flex-col shadow-2xl">
             {/* Handle + header */}
             <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-blue-800">
-              <span className="text-sm font-semibold text-white">选择餐次 Choose meal</span>
+              <span className="text-sm font-semibold text-white">選擇餐次 Choose meal</span>
               <button onClick={() => setOpen(false)} className="text-blue-400 text-xl leading-none px-1">✕</button>
             </div>
 
@@ -589,7 +591,7 @@ function MealPillBar({
                             <span className="text-base font-bold leading-none">{mealTypeShort(m.type)}</span>
                             <span className="text-xs opacity-75 leading-none">{m.startTime.slice(0, 5)}</span>
                             {isAutoSel && (
-                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-300 text-blue-950 leading-none">自动</span>
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-300 text-blue-950 leading-none">自動</span>
                             )}
                           </button>
                         )
@@ -607,7 +609,7 @@ function MealPillBar({
                   onClick={() => { onSelect(undefined); setOpen(false) }}
                   className="w-full py-2.5 rounded-xl bg-blue-900 text-blue-300 text-sm border border-blue-700 active:bg-blue-800"
                 >
-                  重置自动检测 Reset to auto-detect
+                  重置自動檢測 Reset to auto-detect
                 </button>
               </div>
             )}

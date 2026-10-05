@@ -29,17 +29,17 @@ test.describe('Walk-in not yet in the offline cache', () => {
   })
 
   test('meal scan refreshes the cache and serves the walk-in', async ({ page }) => {
-    await page.locator('input[placeholder="手动输入 Person ID"]').fill('U003')
-    await page.locator('button:has-text("查询 Go")').click()
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U003')
+    await page.locator('button:has-text("查詢 Go")').click()
 
-    await expect(page.getByText('成功！请拿饭盒')).toBeVisible()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
     await expect(page.locator('span.text-2xl.font-extrabold')).toHaveText('王小明')
   })
 
   test('a code nobody registered still shows UID not found', async ({ page }) => {
-    await page.locator('input[placeholder="手动输入 Person ID"]').fill('NOBODY')
-    await page.locator('button:has-text("查询 Go")').click()
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill('NOBODY')
+    await page.locator('button:has-text("查詢 Go")').click()
 
-    await expect(page.locator('.text-blue-300').filter({ hasText: '没有这个注册记录 UID not found' })).toBeVisible()
+    await expect(page.locator('.text-blue-300').filter({ hasText: '沒有這個註冊記錄 UID not found' })).toBeVisible()
   })
 })

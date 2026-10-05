@@ -33,7 +33,7 @@ export default function LoginPage({ onLogin }: Props) {
       window.history.replaceState({}, '', window.location.pathname)
       onLogin(res.data.token)
     } catch {
-      setError('密码不对 Invalid access code')
+      setError('密碼不對 Invalid access code')
     } finally {
       setLoading(false)
     }
@@ -44,7 +44,7 @@ export default function LoginPage({ onLogin }: Props) {
       <div className="flex flex-col items-center gap-2">
         <img src="/logo.svg" alt="Good Vessel" className="w-16 h-16 rounded-2xl" />
         <span className="text-xs text-blue-300 tracking-widest uppercase">Good Vessel · 好器皿</span>
-        <h1 className="text-2xl font-bold">志愿者登录 Volunteer Login</h1>
+        <h1 className="text-2xl font-bold">義工登入 Volunteer Login</h1>
       </div>
 
       <div className="w-full max-w-xs flex flex-col gap-4">
@@ -52,7 +52,7 @@ export default function LoginPage({ onLogin }: Props) {
           type="text"
           inputMode="text"
           autoCapitalize="characters"
-          placeholder="输入活动码 Enter access code"
+          placeholder="輸入活動碼 Enter access code"
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
@@ -70,12 +70,12 @@ export default function LoginPage({ onLogin }: Props) {
           disabled={loading || !code.trim()}
           className="w-full py-4 text-lg font-bold rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
-          {loading ? '验证中…' : '登录 Login'}
+          {loading ? '驗證中…' : '登入 Login'}
         </button>
       </div>
 
       <p className="text-blue-400 text-xs text-center">
-        联系活动负责人获取活动码
+        聯繫活動負責人獲取活動碼
         <br />
         Contact event admin for the access code
       </p>

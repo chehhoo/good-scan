@@ -8,12 +8,12 @@ setup('authenticate as volunteer', async ({ page }) => {
     route.fulfill({ json: { token: TEST_TOKEN, eventId: 1, eventName: 'E2E Test Camp' } })
   )
   await page.route('**/api/register/event-info', (route) =>
-    route.fulfill({ json: { id: 1, name: 'E2E 测试营', nameEng: 'E2E Test Camp' } })
+    route.fulfill({ json: { id: 1, name: 'E2E 測試營', nameEng: 'E2E Test Camp' } })
   )
 
   await page.goto('/')
   await page.locator('input[type="text"]').fill('TESTCODE')
-  await page.locator('button:has-text("登录")').click()
+  await page.locator('button:has-text("登入")').click()
 
   // Wait until the app moves past the login screen
   await page.waitForSelector('text=餐食 Meal')

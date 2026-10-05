@@ -29,7 +29,7 @@ export async function mockSyncEndpoints(
     r.fulfill({ json: { token: TEST_TOKEN, eventId: 1, eventName: 'E2E Test Camp' } })
   )
   await page.route('**/api/register/event-info', (r) =>
-    r.fulfill({ json: { id: 1, name: 'E2E 测试营', nameEng: 'E2E Test Camp' } })
+    r.fulfill({ json: { id: 1, name: 'E2E 測試營', nameEng: 'E2E Test Camp' } })
   )
   await page.route('**/api/scan/sync/profiles', (r) =>
     r.fulfill({ json: PROFILES })
@@ -54,5 +54,5 @@ export async function mockSyncEndpoints(
  */
 export async function gotoAndSync(page: Page) {
   await page.goto('/')
-  await page.waitForSelector('text=在线 Online', { timeout: 15_000 })
+  await page.waitForSelector('text=在線 Online', { timeout: 15_000 })
 }
