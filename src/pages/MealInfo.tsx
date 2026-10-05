@@ -83,7 +83,7 @@ export default function MealInfo({ lastScannedUid, refreshKey, onSync }: Props) 
     try {
       const local = await lookupByUid(uid)
       if (!local) {
-        setPersonError('没有找到此人 Person not found')
+        setPersonError('沒有找到此人 Person not found')
         return
       }
       const { profile, registerMeals, meals: personMeals, takenCounts, pickupsByMeal } = local
@@ -101,7 +101,7 @@ export default function MealInfo({ lastScannedUid, refreshKey, onSync }: Props) 
       }
       setPersonResult({ name, uid, registerMeals, meals: personMeals, takenCounts, pickupRecords, lastScanAt })
     } catch {
-      setPersonError('查询失败 Lookup failed')
+      setPersonError('查詢失敗 Lookup failed')
     } finally {
       setPersonLoading(false)
     }
@@ -120,7 +120,7 @@ export default function MealInfo({ lastScannedUid, refreshKey, onSync }: Props) 
     <div className="p-4 flex flex-col gap-4">
       {/* Header row */}
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-blue-300">活动餐食统计 Event Meal Stats</p>
+        <p className="text-sm font-semibold text-blue-300">活動餐食統計 Event Meal Stats</p>
         <button
           onClick={handleSync}
           disabled={syncing || statsLoading}
@@ -132,19 +132,19 @@ export default function MealInfo({ lastScannedUid, refreshKey, onSync }: Props) 
 
       {lastRefresh && (
         <div className="-mt-2 flex items-center justify-between">
-          <p className="text-xs text-blue-500">本机统计 · This device only</p>
-          <p className="text-xs text-blue-400">更新于 {lastRefresh.toLocaleTimeString('zh-CN')}</p>
+          <p className="text-xs text-blue-500">本機統計 · This device only</p>
+          <p className="text-xs text-blue-400">更新於 {lastRefresh.toLocaleTimeString('zh-TW')}</p>
         </div>
       )}
 
       {statsLoading ? (
         <div className="flex items-center justify-center h-32 text-blue-300 animate-pulse text-sm">
-          加载中 Loading…
+          載入中 Loading…
         </div>
       ) : (
         <div className="flex flex-col gap-4">
           {mealStats.length === 0 && (
-            <p className="text-center text-blue-400 text-sm py-6">暂无餐食 No meals found</p>
+            <p className="text-center text-blue-400 text-sm py-6">暫無餐食 No meals found</p>
           )}
           {groupStatsByDate(mealStats).map(({ date, stats }) => (
             <div key={date}>
@@ -179,7 +179,7 @@ export default function MealInfo({ lastScannedUid, refreshKey, onSync }: Props) 
                             <span className={isFull ? 'text-yellow-400' : 'text-green-400'}>{taken}</span>
                             <span className="text-blue-500 text-sm"> / {ordered}</span>
                           </p>
-                          <p className="text-xs text-blue-400">已取 / 订了</p>
+                          <p className="text-xs text-blue-400">已取 / 訂了</p>
                         </div>
                       </div>
 
@@ -193,11 +193,11 @@ export default function MealInfo({ lastScannedUid, refreshKey, onSync }: Props) 
                                 : 'bg-blue-950 text-blue-300 border-blue-700'
                             }`}
                           >
-                            剩余 {remaining} 盒
+                            剩餘 {remaining} 盒
                           </span>
                           {isFull && (
                             <span className="text-xs font-semibold text-yellow-400 bg-yellow-900/40 px-1.5 py-0.5 rounded">
-                              满 FULL
+                              滿 FULL
                             </span>
                           )}
                         </div>
@@ -220,13 +220,13 @@ export default function MealInfo({ lastScannedUid, refreshKey, onSync }: Props) 
 
       {/* Last scanned person */}
       <div className="border-t border-blue-800 pt-4 flex flex-col gap-3">
-        <p className="text-sm font-semibold text-blue-300">上次扫描 Last Scanned</p>
+        <p className="text-sm font-semibold text-blue-300">上次掃描 Last Scanned</p>
 
         {!lastScannedUid && (
-          <p className="text-center text-blue-500 text-sm py-4">尚未扫描 No scan yet</p>
+          <p className="text-center text-blue-500 text-sm py-4">尚未掃描 No scan yet</p>
         )}
         {personLoading && (
-          <p className="text-center text-blue-300 animate-pulse text-sm">查询中 Loading…</p>
+          <p className="text-center text-blue-300 animate-pulse text-sm">查詢中 Loading…</p>
         )}
         {personError && (
           <p className="text-center text-red-400 text-sm">{personError}</p>
@@ -248,9 +248,9 @@ export default function MealInfo({ lastScannedUid, refreshKey, onSync }: Props) 
               <thead className="bg-blue-800/60 text-blue-300 text-xs uppercase tracking-wide">
                 <tr>
                   <th className="px-3 py-2 text-left">餐食 Meal</th>
-                  <th className="px-3 py-2 text-center">订了</th>
-                  <th className="px-3 py-2 text-center">领了</th>
-                  <th className="px-3 py-2 text-left">记录</th>
+                  <th className="px-3 py-2 text-center">訂了</th>
+                  <th className="px-3 py-2 text-center">領了</th>
+                  <th className="px-3 py-2 text-left">記錄</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-blue-800">
@@ -288,7 +288,7 @@ export default function MealInfo({ lastScannedUid, refreshKey, onSync }: Props) 
                 {personResult.registerMeals.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-3 py-4 text-center text-blue-400">
-                      无订餐记录 No meal orders
+                      無訂餐記錄 No meal orders
                     </td>
                   </tr>
                 )}
@@ -311,7 +311,7 @@ function groupStatsByDate(stats: MealStat[]): { date: string; stats: MealStat[] 
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })
+  return new Date(iso + 'T00:00:00').toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'short' })
 }
 
 function mealTypeLabel(type: number) {
@@ -321,11 +321,11 @@ function mealTypeLabel(type: number) {
 function prettyTime(iso: string): string {
   const d = new Date(iso)
   const diffMin = Math.floor((Date.now() - d.getTime()) / 60000)
-  if (diffMin < 1)  return '刚刚 just now'
-  if (diffMin < 60) return `${diffMin} 分钟前`
-  const hhmm = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+  if (diffMin < 1)  return '剛剛 just now'
+  if (diffMin < 60) return `${diffMin} 分鐘前`
+  const hhmm = d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })
   const today = new Date().toDateString() === d.toDateString()
   if (today) return `今天 ${hhmm}`
-  const md = d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
+  const md = d.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })
   return `${md} ${hhmm}`
 }

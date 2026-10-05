@@ -17,9 +17,9 @@ const OPTS = { meals: TIMED_MEALS, registerMeals: TIMED_REGISTER_MEALS }
 type TestPage = Parameters<Parameters<typeof test>[1]>[0]['page']
 
 async function scanU001(page: TestPage) {
-  await page.locator('input[placeholder="手动输入 Person ID"]').fill('U001')
-  await page.locator('button:has-text("查询 Go")').click()
-  await expect(page.getByText('成功！请拿饭盒')).toBeVisible()
+  await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U001')
+  await page.locator('button:has-text("查詢 Go")').click()
+  await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
 }
 
 // The meal label appears in a <span> with these classes, distinct from the table rows
@@ -73,7 +73,7 @@ test.describe('Meal auto-detection', () => {
 
     // Bottom sheet should open without any user interaction
     // Target the sheet header (font-semibold white), not the pill bar placeholder (blue-400)
-    await expect(page.locator('span.font-semibold.text-white', { hasText: '选择餐次 Choose meal' })).toBeVisible({ timeout: 5_000 })
+    await expect(page.locator('span.font-semibold.text-white', { hasText: '選擇餐次 Choose meal' })).toBeVisible({ timeout: 5_000 })
     // Both meals shown as options in the sheet
     await expect(page.locator('button', { hasText: '午餐' }).first()).toBeVisible()
     await expect(page.locator('button', { hasText: '晚餐' }).first()).toBeVisible()

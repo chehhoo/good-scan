@@ -19,13 +19,13 @@ export default function StatusDot({ online, pendingCount, lastSyncAt, onSync }: 
 
   if (!online) {
     color = 'bg-yellow-400'
-    label = pendingCount > 0 ? `离线 ${pendingCount} 待同步` : '离线 Offline'
+    label = pendingCount > 0 ? `離線 ${pendingCount} 待同步` : '離線 Offline'
   } else if (stale) {
     color = syncing ? 'bg-yellow-400 animate-pulse' : 'bg-red-500'
-    label = syncing ? '同步中…' : '缓存过期 · 点击同步'
+    label = syncing ? '同步中…' : '緩存過期 · 點擊同步'
   } else {
     color = 'bg-green-400'
-    label = '在线 Online'
+    label = '在線 Online'
   }
 
   const tappable = online && stale && !syncing

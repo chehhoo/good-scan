@@ -41,7 +41,7 @@ export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss }: {
       }
       if (!local) {
         playError()
-        setError('未找到此人 Person not found — 请先同步 Please sync first')
+        setError('未找到此人 Person not found — 請先同步 Please sync first')
         setLoading(false)
         return
       }
@@ -52,7 +52,7 @@ export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss }: {
       const res = await syncApi.checkIn(uid)
       if (!res.data.success) {
         playError()
-        setError(res.data.error ?? '报到失败 Check-in failed')
+        setError(res.data.error ?? '報到失敗 Check-in failed')
         setLoading(false)
         return
       }
@@ -69,7 +69,7 @@ export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss }: {
       })
     } catch (e) {
       playError()
-      setError('系统错误 System error: ' + String(e))
+      setError('系統錯誤 System error: ' + String(e))
     } finally {
       setLoading(false)
     }
@@ -85,12 +85,12 @@ export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss }: {
   const startVoice = () => {
     const SpeechRecognition = window.SpeechRecognition ?? (window as any).webkitSpeechRecognition
     if (!SpeechRecognition) {
-      alert('此浏览器不支持语音识别 Voice recognition not supported')
+      alert('此瀏覽器不支援語音識別 Voice recognition not supported')
       return
     }
     if (recognitionRef.current) { recognitionRef.current.abort(); recognitionRef.current = null }
     const rec = new SpeechRecognition()
-    rec.lang = 'zh-CN'
+    rec.lang = 'zh-TW'
     rec.interimResults = false
     rec.maxAlternatives = 1
     recognitionRef.current = rec
@@ -118,8 +118,8 @@ export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss }: {
       <div className="min-h-full flex flex-col items-center justify-center gap-4 p-6 text-center">
         <div className="text-5xl">🔒</div>
         <p className="text-xl font-bold">未同步 Not Synced</p>
-        <p className="text-blue-300 text-sm">扫描前请先同步数据<br />Please sync before scanning</p>
-        <p className="text-blue-500 text-xs">点击右上角状态点同步<br />Tap the status dot to sync</p>
+        <p className="text-blue-300 text-sm">掃描前請先同步資料<br />Please sync before scanning</p>
+        <p className="text-blue-500 text-xs">點擊右上角狀態點同步<br />Tap the status dot to sync</p>
       </div>
     )
   }
@@ -135,7 +135,7 @@ export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss }: {
                 ref={manualInputRef}
                 type="text"
                 className="flex-1 bg-blue-900 border border-blue-700 rounded-lg px-3 py-2 text-sm font-mono placeholder-blue-500 focus:outline-none focus:border-blue-400"
-                placeholder="手动输入 Person ID"
+                placeholder="手動輸入 Person ID"
                 value={manualUid}
                 onChange={(e) => setManualUid(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submitManualUid()}
@@ -145,7 +145,7 @@ export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss }: {
                 disabled={!manualUid.trim()}
                 className="px-4 py-2 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-lg text-sm font-semibold transition-colors"
               >
-                查询 Go
+                查詢 Go
               </button>
               <button
                 onClick={startVoice}
@@ -161,18 +161,18 @@ export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss }: {
 
       {loading && (
         <div className="flex items-center justify-center h-48 text-blue-300 text-lg animate-pulse">
-          报到中 Checking in…
+          報到中 Checking in…
         </div>
       )}
 
       {error && !loading && (
         <div className="flex flex-col gap-4 p-4">
           <div className="bg-red-700 rounded-xl px-4 py-5 text-center">
-            <p className="text-xl font-bold">✗ 报到失败 Check-In Failed</p>
+            <p className="text-xl font-bold">✗ 報到失敗 Check-In Failed</p>
             <p className="text-sm mt-1 text-red-200">{error}</p>
           </div>
           <button onClick={reset} className="w-full py-4 bg-blue-700 hover:bg-blue-600 rounded-xl text-lg font-bold">
-            重试 Try Again
+            重試 Try Again
           </button>
         </div>
       )}
@@ -182,7 +182,7 @@ export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss }: {
           {/* Status banner */}
           <div className={`rounded-xl px-4 py-6 text-center ${result.alreadyCheckedIn ? 'bg-yellow-600' : 'bg-green-600'}`}>
             <p className="text-3xl font-black mb-1">
-              {result.alreadyCheckedIn ? '⚠ 已报到' : '✓ 报到成功!'}
+              {result.alreadyCheckedIn ? '⚠ 已報到' : '✓ 報到成功!'}
             </p>
             <p className="text-sm">
               {result.alreadyCheckedIn ? 'Already checked in' : 'Check-In Successful'}
@@ -193,7 +193,7 @@ export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss }: {
           <div className="bg-blue-900 rounded-xl px-4 py-5 text-center flex flex-col gap-3">
             <p className="text-4xl font-black tracking-wide">{result.name}</p>
             <div className="flex flex-col items-center gap-0.5">
-              <p className="text-blue-400 text-xs uppercase tracking-widest">报到时间 Check-In Time</p>
+              <p className="text-blue-400 text-xs uppercase tracking-widest">報到時間 Check-In Time</p>
               <p className="text-white text-2xl font-bold tabular-nums">
                 {formatCheckinTime(result.checkinTime)}
               </p>
@@ -203,7 +203,7 @@ export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss }: {
 
           {/* Scan next */}
           <button onClick={reset} className="w-full py-4 bg-blue-700 hover:bg-blue-600 active:bg-blue-800 rounded-xl text-lg font-bold transition-colors">
-            扫描下一位 Scan Next
+            掃描下一位 Scan Next
           </button>
         </div>
       )}
@@ -217,9 +217,9 @@ function parseCheckinTime(iso: string): Date {
 }
 
 function formatCheckinTime(iso: string): string {
-  return parseCheckinTime(iso).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+  return parseCheckinTime(iso).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 }
 
 function formatCheckinDate(iso: string): string {
-  return parseCheckinTime(iso).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })
+  return parseCheckinTime(iso).toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })
 }

@@ -251,8 +251,8 @@ export default function App() {
             }`}
           >
             {t === 'meal' && '🍽 餐食 Meal'}
-            {t === 'checkin' && '✓ 报到 Check-In'}
-            {t === 'info' && '📋 统计 Info'}
+            {t === 'checkin' && '✓ 報到 Check-In'}
+            {t === 'info' && '📋 統計 Info'}
           </button>
         ))}
       </nav>

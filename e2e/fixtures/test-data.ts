@@ -18,7 +18,7 @@ export const TEST_TOKEN = 'test-jwt-volunteer'
 
 export const PROFILES = [
   { id: 1, uid: 'U001', cnName: '朱大明', firstName: 'David', lastName: 'Zhu', householdId: 1 },
-  { id: 2, uid: 'U002', cnName: '李小红', firstName: 'Hong', lastName: 'Li',  householdId: 2 },
+  { id: 2, uid: 'U002', cnName: '李小紅', firstName: 'Hong', lastName: 'Li',  householdId: 2 },
 ]
 
 export const MEALS = [

@@ -17,9 +17,9 @@ test.describe('Login page', () => {
   test('shows branding and access code input', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByText('Good Vessel · 好器皿')).toBeVisible()
-    await expect(page.getByText('志愿者登录 Volunteer Login')).toBeVisible()
+    await expect(page.getByText('義工登入 Volunteer Login')).toBeVisible()
     await expect(page.locator('input[type="text"]')).toBeVisible()
-    await expect(page.getByRole('button', { name: /登录/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /登入/ })).toBeVisible()
   })
 
   test('valid access code logs in and shows app', async ({ page }) => {
@@ -27,7 +27,7 @@ test.describe('Login page', () => {
     await page.goto('/')
 
     await page.locator('input[type="text"]').fill('GOSPEL2026')
-    await page.getByRole('button', { name: /登录/ }).click()
+    await page.getByRole('button', { name: /登入/ }).click()
 
     await page.waitForSelector('text=餐食 Meal', { timeout: 10_000 })
   })
@@ -39,9 +39,9 @@ test.describe('Login page', () => {
     await page.goto('/')
 
     await page.locator('input[type="text"]').fill('WRONGCODE')
-    await page.getByRole('button', { name: /登录/ }).click()
+    await page.getByRole('button', { name: /登入/ }).click()
 
-    await expect(page.getByText('密码不对 Invalid access code')).toBeVisible()
+    await expect(page.getByText('密碼不對 Invalid access code')).toBeVisible()
   })
 
   test('enter key submits the form', async ({ page }) => {
@@ -63,6 +63,6 @@ test.describe('Login page', () => {
 
   test('empty input keeps login button disabled', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByRole('button', { name: /登录/ })).toBeDisabled()
+    await expect(page.getByRole('button', { name: /登入/ })).toBeDisabled()
   })
 })

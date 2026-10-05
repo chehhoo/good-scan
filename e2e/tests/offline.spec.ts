@@ -15,12 +15,12 @@ test.describe('Offline operation', () => {
     await gotoAndSync(page)
 
     await context.setOffline(true)
-    await expect(page.getByText('离线 Offline')).toBeVisible()
+    await expect(page.getByText('離線 Offline')).toBeVisible()
 
-    await page.locator('input[placeholder="手动输入 Person ID"]').fill('U001')
-    await page.locator('button:has-text("查询 Go")').click()
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U001')
+    await page.locator('button:has-text("查詢 Go")').click()
 
-    await expect(page.getByText('成功！请拿饭盒')).toBeVisible()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
     await expect(page.locator('span.text-2xl.font-extrabold')).toHaveText('朱大明')
   })
 
@@ -29,14 +29,14 @@ test.describe('Offline operation', () => {
     await gotoAndSync(page)
 
     await context.setOffline(true)
-    await expect(page.getByText('离线 Offline')).toBeVisible()
+    await expect(page.getByText('離線 Offline')).toBeVisible()
 
-    await page.locator('input[placeholder="手动输入 Person ID"]').fill('U001')
-    await page.locator('button:has-text("查询 Go")').click()
-    await expect(page.getByText('成功！请拿饭盒')).toBeVisible()
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U001')
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
 
     // StatusDot shows pending count — refreshPendingCount fires every 10s
-    await expect(page.getByText(/离线 \d+ 待同步/)).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText(/離線 \d+ 待同步/)).toBeVisible({ timeout: 15_000 })
   })
 
   test('4.3 — queued scans flush automatically when back online', async ({ page, context }) => {
@@ -50,9 +50,9 @@ test.describe('Offline operation', () => {
 
     // Scan offline
     await context.setOffline(true)
-    await page.locator('input[placeholder="手动输入 Person ID"]').fill('U001')
-    await page.locator('button:has-text("查询 Go")').click()
-    await expect(page.getByText('成功！请拿饭盒')).toBeVisible()
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U001')
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
 
     // Come back online — flushQueue runs every 10s; wait up to 15s
     await context.setOffline(false)
@@ -69,13 +69,13 @@ test.describe('Offline operation', () => {
     await gotoAndSync(page)
 
     // Scan U001 for meal 1
-    await page.locator('input[placeholder="手动输入 Person ID"]').fill('U001')
-    await page.locator('button:has-text("查询 Go")').click()
-    await expect(page.getByText('成功！请拿饭盒')).toBeVisible()
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U001')
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
     // Taken should now be 1
     const takenBefore = await page.locator('.text-2xl.font-bold.tabular-nums').nth(1).textContent()
     expect(takenBefore?.trim()).toBe('1')
-    await page.locator('button:has-text("扫描下一位")').click()
+    await page.locator('button:has-text("掃描下一位")').click()
 
     // Re-mock sync to mark that scan as voided (last-registered route takes precedence)
     await page.route('**/api/scan/sync/voided-scans', (r) =>
@@ -84,12 +84,12 @@ test.describe('Offline operation', () => {
 
     // Reload — warmUpCache auto-fires on mount, picks up the voided-scans override
     await page.reload()
-    await expect(page.getByText('在线 Online')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText('在線 Online')).toBeVisible({ timeout: 10_000 })
 
     // Scan U001 again — voided scan should be gone, taken resets to 0
-    await page.locator('input[placeholder="手动输入 Person ID"]').fill('U001')
-    await page.locator('button:has-text("查询 Go")').click()
-    await expect(page.getByText('成功！请拿饭盒')).toBeVisible()
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U001')
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
     const takenAfter = await page.locator('.text-2xl.font-bold.tabular-nums').nth(1).textContent()
     // void removed the old scan (taken was 1), this is a fresh scan so shown taken = 1
     // if void didn't work, taken would be 2 (old scan + new scan)
@@ -99,17 +99,17 @@ test.describe('Offline operation', () => {
   test('4.5 — stale previous-event data cleared on re-sync (clear + bulkAdd, not upsert)', async ({ page }) => {
     // First load: only old profile U999
     const oldProfiles = [
-      { id: 99, uid: 'U999', cnName: '旧营员', firstName: 'Old', lastName: 'Attendee', householdId: 99 },
+      { id: 99, uid: 'U999', cnName: '舊營員', firstName: 'Old', lastName: 'Attendee', householdId: 99 },
     ]
     await mockSyncEndpoints(page, { meals: [], registerMeals: [] })
     await page.route('**/api/scan/sync/profiles', (r) => r.fulfill({ json: oldProfiles }))
     await gotoAndSync(page)
 
     // U999 should be findable
-    await page.locator('input[placeholder="手动输入 Person ID"]').fill('U999')
-    await page.locator('button:has-text("查询 Go")').click()
-    await expect(page.getByText('旧营员')).toBeVisible()
-    await page.locator('button:has-text("扫描下一位")').click()
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U999')
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('舊營員')).toBeVisible()
+    await page.locator('button:has-text("掃描下一位")').click()
 
     // New sync: U999 is gone — only U001 exists now (new event)
     await page.route('**/api/scan/sync/profiles', (r) =>
@@ -118,11 +118,11 @@ test.describe('Offline operation', () => {
 
     // Reload — warmUpCache auto-fires, picks up the new profiles route
     await page.reload()
-    await expect(page.getByText('在线 Online')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText('在線 Online')).toBeVisible({ timeout: 10_000 })
 
     // U999 should no longer be found — IndexedDB was cleared and replaced
-    await page.locator('input[placeholder="手动输入 Person ID"]').fill('U999')
-    await page.locator('button:has-text("查询 Go")').click()
-    await expect(page.locator('span.text-red-300').filter({ hasText: '没有这个注册记录 UID not found' })).toBeVisible({ timeout: 5_000 })
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U999')
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.locator('span.text-red-300').filter({ hasText: '沒有這個註冊記錄 UID not found' })).toBeVisible({ timeout: 5_000 })
   })
 })

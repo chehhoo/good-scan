@@ -30,7 +30,7 @@ export default function ResultBanner({ name, status, message, mealOrdered, mealT
           {mealTaken} / {mealOrdered} 份已取 served
         </p>
       )}
-      <p className="text-xs opacity-60 mt-1">点击继续 Tap to continue</p>
+      <p className="text-xs opacity-60 mt-1">點擊繼續 Tap to continue</p>
     </div>
   )
 }
