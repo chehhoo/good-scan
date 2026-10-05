@@ -24,6 +24,8 @@ export default function App() {
   const cacheIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const warmingUp = useRef(false)
+  const warmUpInFlight = useRef<Promise<void> | null>(null)
+  const lastMissRefreshAt = useRef(0)
   // Manual entry: always on in dev; toggle by tapping version badge 5× in prod
   const [manualEntryEnabled, setManualEntryEnabled] = useState<boolean>(
     import.meta.env.DEV || localStorage.getItem(MANUAL_ENTRY_KEY) === '1'
@@ -114,7 +116,29 @@ export default function App() {
     }
   }, [])
 
-  async function warmUpCache() {
+  // One cache refresh at a time — concurrent callers share it, so a cache-miss retry
+  // really waits for fresh data instead of returning while another refresh runs.
+  function warmUpCache(): Promise<void> {
+    if (!warmUpInFlight.current) {
+      warmUpInFlight.current = doWarmUpCache().finally(() => { warmUpInFlight.current = null })
+    }
+    return warmUpInFlight.current
+  }
+
+  /**
+   * A scanned person isn't in the offline cache — e.g. a walk-in registered at the
+   * door minutes ago, before the next 5-minute refresh. Refresh once and let the
+   * caller retry. Throttled so a foreign/garbled QR scanned repeatedly can't hammer
+   * the server with full refreshes.
+   */
+  async function refreshOnCacheMiss(): Promise<void> {
+    if (!navigator.onLine) return
+    if (Date.now() - lastMissRefreshAt.current < 20_000) return
+    lastMissRefreshAt.current = Date.now()
+    await warmUpCache()
+  }
+
+  async function doWarmUpCache() {
     if (!navigator.onLine) return
     if (warmingUp.current) return
     warmingUp.current = true
@@ -235,8 +259,8 @@ export default function App() {
 
       {/* Page content */}
       <main className="flex-1 overflow-y-auto">
-        {tab === 'meal' && <MealScan manualEntryEnabled={manualEntryEnabled} isSynced={lastSyncAt !== null && Date.now() - lastSyncAt.getTime() <= 30 * 60 * 1000} onScan={setLastScannedUid} />}
-        {tab === 'checkin' && <CheckIn manualEntryEnabled={manualEntryEnabled} isSynced={lastSyncAt !== null && Date.now() - lastSyncAt.getTime() <= 30 * 60 * 1000} />}
+        {tab === 'meal' && <MealScan manualEntryEnabled={manualEntryEnabled} isSynced={lastSyncAt !== null && Date.now() - lastSyncAt.getTime() <= 30 * 60 * 1000} onScan={setLastScannedUid} onCacheMiss={refreshOnCacheMiss} />}
+        {tab === 'checkin' && <CheckIn manualEntryEnabled={manualEntryEnabled} isSynced={lastSyncAt !== null && Date.now() - lastSyncAt.getTime() <= 30 * 60 * 1000} onCacheMiss={refreshOnCacheMiss} />}
         {tab === 'info' && <MealInfo lastScannedUid={lastScannedUid} refreshKey={infoRefreshKey} onSync={warmUpCache} />}
       </main>
     </div>

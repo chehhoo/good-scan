@@ -11,7 +11,11 @@ interface CheckInResult {
   checkinTime: string   // ISO string
 }
 
-export default function CheckIn({ manualEntryEnabled, isSynced }: { manualEntryEnabled: boolean; isSynced: boolean }) {
+export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss }: {
+  manualEntryEnabled: boolean; isSynced: boolean
+  /** Refresh the offline cache when a scanned person isn't in it (e.g. a just-registered walk-in) */
+  onCacheMiss?: () => Promise<void>
+}) {
   const [scanning, setScanning] = useState(true)
   const [result, setResult] = useState<CheckInResult | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -30,7 +34,11 @@ export default function CheckIn({ manualEntryEnabled, isSynced }: { manualEntryE
 
     try {
       // Check local cache first for name
-      const local = await lookupByUid(uid)
+      let local = await lookupByUid(uid)
+      if (!local && onCacheMiss) {
+        await onCacheMiss()
+        local = await lookupByUid(uid)
+      }
       if (!local) {
         playError()
         setError('未找到此人 Person not found — 请先同步 Please sync first')
@@ -65,7 +73,7 @@ export default function CheckIn({ manualEntryEnabled, isSynced }: { manualEntryE
     } finally {
       setLoading(false)
     }
-  }, [loading])
+  }, [loading, onCacheMiss])
 
   const submitManualUid = useCallback(() => {
     const uid = manualUid.trim()
