@@ -20,6 +20,7 @@ export interface ScanRequest {
   uid: string
   mealId: number
   scannedAt: string
+  clientScanId?: string
 }
 
 export interface Venue {
@@ -85,8 +86,8 @@ export const syncApi = {
 // ── Scan / lookup API ──────────────────────────────────────────────────────
 
 export const scanApi = {
-  scan: (uid: string, mealId: number) =>
-    api.post<void>('/meal/scan', { id: uid, mealId }),
+  scan: (uid: string, mealId: number, clientScanId?: string) =>
+    api.post<void>('/meal/scan', { id: uid, mealId, clientScanId }),
 
   venues: () =>
     api.get<Venue[]>('/meal/venues'),

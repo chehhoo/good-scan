@@ -174,7 +174,7 @@ export default function App() {
           .primaryKeys()
         await db.scanQueue.bulkDelete(staleIds as number[])
         await db.scanQueue.bulkAdd(
-          serverScans.data.map((s) => ({ uid: s.uid, mealId: s.mealId, scannedAt: s.scannedAt, synced: true as const }))
+          serverScans.data.map((s) => ({ uid: s.uid, mealId: s.mealId, scannedAt: s.scannedAt, synced: true as const, clientScanId: crypto.randomUUID() }))
         )
       })
       const now = new Date()
@@ -198,7 +198,7 @@ export default function App() {
     if (pending.length === 0) return
     try {
       const res = await syncApi.flushScans(
-        pending.map((s) => ({ localId: s.id!, uid: s.uid, mealId: s.mealId, scannedAt: s.scannedAt }))
+        pending.map((s) => ({ localId: s.id!, uid: s.uid, mealId: s.mealId, scannedAt: s.scannedAt, clientScanId: s.clientScanId }))
       )
       const accepted = res.data.accepted
       await Promise.all(

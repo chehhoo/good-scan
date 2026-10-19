@@ -39,6 +39,7 @@ export interface ScanQueueItem {
   mealId: number
   scannedAt: string     // ISO timestamp
   synced: boolean       // false = pending flush to good-api
+  clientScanId: string  // UUID — dedup key sent to server with every copy of this scan
   syncError?: string    // last error if sync failed
 }
 
@@ -108,13 +109,16 @@ export async function lookupByUid(uid: string) {
   return { profile, registerMeals, meals, takenCounts, pickupsByMeal }
 }
 
-export async function queueScan(uid: string, mealId: number): Promise<number> {
-  return db.scanQueue.add({
+export async function queueScan(uid: string, mealId: number): Promise<{ id: number; clientScanId: string }> {
+  const clientScanId = crypto.randomUUID()
+  const id = await db.scanQueue.add({
     uid,
     mealId,
     scannedAt: new Date().toISOString(),
     synced: false,
+    clientScanId,
   })
+  return { id: id as number, clientScanId }
 }
 
 export async function markSynced(id: number) {
