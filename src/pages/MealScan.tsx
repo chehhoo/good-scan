@@ -112,8 +112,11 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
       const newTaken = isExceeded ? taken : taken + 1
 
       let localQueueId: number | undefined
+      let localClientScanId: string | undefined
       if (!isExceeded) {
-        localQueueId = await queueScan(uid, mealId)
+        const queued = await queueScan(uid, mealId)
+        localQueueId = queued.id
+        localClientScanId = queued.clientScanId
       }
 
       if (navigator.onLine && !isExceeded) {
@@ -122,7 +125,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
         // second copy of the same pickup — leaving the original row forever
         // "synced: false" caused every online scan to be double-counted once
         // the warm-up cycle ran, inflating household pickup history and quota.
-        scanApi.scan(uid, mealId)
+        scanApi.scan(uid, mealId, localClientScanId)
           .then(() => { if (localQueueId != null) markSynced(localQueueId) })
           .catch(() => {})
       }
