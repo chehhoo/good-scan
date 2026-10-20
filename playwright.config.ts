@@ -40,13 +40,31 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'], storageState: 'e2e/fixtures/.auth.json' },
       dependencies: ['setup'],
+      testIgnore: '**/integration.spec.ts',
+    },
+    {
+      // Integration project: real good-api, no mocks, no saved auth state.
+      // Run with: E2E_ACCESS_CODE=GOSPEL2026 npx playwright test --project=integration
+      name: 'integration',
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5173' },
+      testMatch: '**/integration.spec.ts',
     },
   ],
 
-  webServer: {
-    command: 'npm run dev -- --port 5174',
-    url: 'http://localhost:5174',
-    reuseExistingServer: !process.env.CI,
-    timeout: 30_000,
-  },
+  webServer: [
+    {
+      // Mocked suite — port 5174
+      command: 'npm run dev -- --port 5174',
+      url: 'http://localhost:5174',
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
+    {
+      // Integration suite — standard port 5173 (proxies /api → localhost:8090)
+      command: 'npm run dev -- --port 5173',
+      url: 'http://localhost:5173',
+      reuseExistingServer: true,   // reuse if already running; don't start in CI
+      timeout: 30_000,
+    },
+  ],
 })
