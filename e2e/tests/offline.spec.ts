@@ -44,7 +44,8 @@ test.describe('Offline operation', () => {
     await mockSyncEndpoints(page)
     await page.route('**/api/scan/sync/flush', (r) => {
       flushCalled = true
-      r.fulfill({ json: { accepted: [1], rejected: [] } })
+      // localId comes back as string from the real API
+      r.fulfill({ json: { accepted: ['1'], rejected: [] } })
     })
     await gotoAndSync(page)
 
@@ -62,6 +63,74 @@ test.describe('Offline operation', () => {
     await expect
       .poll(() => flushCalled, { timeout: 15_000, intervals: [1000] })
       .toBe(true)
+  })
+
+  test('4.3b — flush accepted with string localId marks row synced (pending count drops to 0)', async ({ page, context }) => {
+    await mockSyncEndpoints(page)
+    await page.route('**/api/scan/sync/flush', (r) =>
+      r.fulfill({ json: { accepted: ['1'], rejected: [] } })
+    )
+    await page.route('**/api/meal/scan', (r) => r.fulfill({ status: 503, body: 'unavailable' }))
+    await gotoAndSync(page)
+
+    // Scan offline so it queues
+    await context.setOffline(true)
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U001')
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
+
+    // Pending count appears
+    await expect(page.getByText(/離線 \d+ 待同步/)).toBeVisible({ timeout: 15_000 })
+
+    // Come back online — flush fires, row should be marked synced
+    await context.setOffline(false)
+    // After flush, pending count should drop to 0 (badge disappears or shows 0)
+    await expect
+      .poll(async () => page.getByText(/離線 \d+ 待同步/).isVisible(), { timeout: 20_000, intervals: [1000] })
+      .toBe(false)
+  })
+
+  test('4.3c — flush rejected with final reason marks row refused (not resent)', async ({ page, context }) => {
+    await mockSyncEndpoints(page)
+    await page.route('**/api/scan/sync/flush', (r) =>
+      r.fulfill({ json: { accepted: [], rejected: [{ localId: '1', reason: 'Quota exceeded (qty=4)' }] } })
+    )
+    await page.route('**/api/meal/scan', (r) => r.fulfill({ status: 503, body: 'unavailable' }))
+    await gotoAndSync(page)
+
+    // Scan offline
+    await context.setOffline(true)
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U001')
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
+
+    // Come back online — flush fires, row should be refused
+    await context.setOffline(false)
+    // Refused badge appears in header
+    await expect(page.getByText('1 筆未被接受')).toBeVisible({ timeout: 20_000 })
+    // Pending count should be 0 (refused rows don't count as pending)
+    await expect(page.getByText(/離線 \d+ 待同步/)).not.toBeVisible()
+  })
+
+  test('4.3d — flush rejected with transient reason keeps row pending', async ({ page, context }) => {
+    let flushCount = 0
+    await mockSyncEndpoints(page)
+    await page.route('**/api/scan/sync/flush', (r) => {
+      flushCount++
+      r.fulfill({ json: { accepted: [], rejected: [{ localId: '1', reason: 'No active event' }] } })
+    })
+    await page.route('**/api/meal/scan', (r) => r.fulfill({ status: 503, body: 'unavailable' }))
+    await gotoAndSync(page)
+
+    await context.setOffline(true)
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U001')
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
+
+    await context.setOffline(false)
+    // Wait for two flush attempts — row should stay pending each time
+    await expect.poll(() => flushCount >= 2, { timeout: 25_000, intervals: [1000] }).toBe(true)
+    await expect(page.getByText('1 筆未被接受')).not.toBeVisible()
   })
 
   test('4.4 — voided scan removed from local queue on next sync', async ({ page }) => {
