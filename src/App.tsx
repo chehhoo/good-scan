@@ -4,7 +4,7 @@ import CheckIn from './pages/CheckIn'
 import MealInfo from './pages/MealInfo'
 import LoginPage from './pages/LoginPage'
 import StatusDot from './components/StatusDot'
-import { db, markSynced, getPendingScans } from './db/localDb'
+import { db, markSynced, markRefused, getPendingScans, getRefusedScans, dismissRefusedScan, type ScanQueueItem } from './db/localDb'
 import { syncApi, eventApi, type ActiveEvent } from './api/client'
 
 type Tab = 'meal' | 'checkin' | 'info'
@@ -20,6 +20,8 @@ export default function App() {
   const [activeEvent, setActiveEvent] = useState<ActiveEvent | null>(null)
   const [lastScannedUid, setLastScannedUid] = useState<string | null>(null)
   const [infoRefreshKey, setInfoRefreshKey] = useState(0)
+  const [refusedScans, setRefusedScans] = useState<ScanQueueItem[]>([])
+  const [showRefused, setShowRefused] = useState(false)
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const cacheIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -61,10 +63,12 @@ export default function App() {
     }
   }
 
-  // Update pending count
+  // Update pending count and refused list
   const refreshPendingCount = async () => {
     const pending = await getPendingScans()
     setPendingCount(pending.length)
+    const refused = await getRefusedScans()
+    setRefusedScans(refused)
   }
 
   // Ping the server to confirm actual reachability (not just navigator.onLine)
@@ -162,19 +166,23 @@ export default function App() {
         for (const v of voided.data) {
           await db.scanQueue.where('[uid+mealId]').equals([v.uid, v.mealId]).delete()
         }
-        // Merge server scan records: delete all synced entries (filter avoids boolean/int mismatch), insert fresh ones.
-        // Also drop any still-unsynced local entry the server now confirms — normally the
-        // real-time scan path marks its own row synced on success (see MealScan.tsx), but if
-        // that never completes (app closed/backgrounded mid-request) the row would otherwise
-        // stay "synced: false" forever while this same pickup gets re-added as a synced copy,
-        // double-counting one real scan as two rows in household pickup history/quota.
-        const confirmedKeys = new Set(serverScans.data.map((s) => `${s.uid}:${s.mealId}`))
+        // Merge server scan records. Drop synced rows and unsynced rows the server confirms.
+        // Match by clientScanId when the server provides it (v3.44+); fall back to uid:mealId
+        // for older server scans. Never drop refused rows — they stay until the volunteer dismisses them.
+        const serverClientScanIds = new Set(serverScans.data.map((s) => s.clientScanId).filter(Boolean))
+        const confirmedKeys = new Set(serverScans.data.filter((s) => !s.clientScanId).map((s) => `${s.uid}:${s.mealId}`))
         const staleIds = await db.scanQueue
-          .filter((s) => s.synced === true || confirmedKeys.has(`${s.uid}:${s.mealId}`))
+          .filter((s) => {
+            if (s.refused) return false  // never auto-delete refused rows
+            if (s.synced) return true
+            if (s.clientScanId && serverClientScanIds.has(s.clientScanId)) return true
+            if (!s.clientScanId && confirmedKeys.has(`${s.uid}:${s.mealId}`)) return true
+            return false
+          })
           .primaryKeys()
         await db.scanQueue.bulkDelete(staleIds as number[])
         await db.scanQueue.bulkAdd(
-          serverScans.data.map((s) => ({ uid: s.uid, mealId: s.mealId, scannedAt: s.scannedAt, synced: true as const, clientScanId: crypto.randomUUID() }))
+          serverScans.data.map((s) => ({ uid: s.uid, mealId: s.mealId, scannedAt: s.scannedAt, synced: true as const, clientScanId: s.clientScanId ?? crypto.randomUUID() }))
         )
       })
       const now = new Date()
@@ -200,17 +208,34 @@ export default function App() {
       const res = await syncApi.flushScans(
         pending.map((s) => ({ localId: s.id!, uid: s.uid, mealId: s.mealId, scannedAt: s.scannedAt, clientScanId: s.clientScanId }))
       )
-      const accepted = res.data.accepted
-      await Promise.all(
-        pending
-          .filter((s) => s.id !== undefined && accepted.includes(s.id!))
-          .map((s) => markSynced(s.id!))
-      )
+      // localId comes back as string from the API
+      const accepted = new Set(res.data.accepted.map(String))
+      const rejected = res.data.rejected ?? []
+      await Promise.all([
+        ...pending
+          .filter((s) => s.id !== undefined && accepted.has(String(s.id)))
+          .map((s) => markSynced(s.id!)),
+        ...rejected
+          .filter((r) => !isTransientRejection(r.reason))
+          .map((r) => {
+            const row = pending.find((s) => String(s.id) === String(r.localId))
+            return row?.id != null ? markRefused(row.id, r.reason) : Promise.resolve()
+          }),
+      ])
       setLastSyncAt(new Date())
       await refreshPendingCount()
     } catch {
-      // Will retry on next interval
+      // Network error or 5xx — leave everything pending, retry on next interval
     }
+  }
+
+  function isTransientRejection(reason: string): boolean {
+    return reason.includes('No active event') || reason.includes('503') || reason.includes('Could not save the scan')
+  }
+
+  function formatRefusedReason(reason: string): string {
+    if (reason.includes('Quota exceeded')) return '已超過此家庭訂餐數量 Over the family\'s order'
+    return reason
   }
 
   if (!token) {
@@ -235,8 +260,50 @@ export default function App() {
             </span>
           </div>
         </div>
-        <StatusDot online={online} pendingCount={pendingCount} lastSyncAt={lastSyncAt} onSync={warmUpCache} />
+        <div className="flex items-center gap-2">
+          {refusedScans.length > 0 && (
+            <button
+              onClick={() => setShowRefused(true)}
+              className="text-xs font-semibold bg-red-700 text-white px-2 py-1 rounded-lg"
+            >
+              {refusedScans.length} 筆未被接受
+            </button>
+          )}
+          <StatusDot online={online} pendingCount={pendingCount} lastSyncAt={lastSyncAt} onSync={warmUpCache} />
+        </div>
       </header>
+
+      {/* Refused scans modal */}
+      {showRefused && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-end justify-center" onClick={() => setShowRefused(false)}>
+          <div className="w-full max-w-lg bg-blue-950 border border-red-700 rounded-t-2xl p-4 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-red-400 mb-1">未被接受的掃描 Not Accepted</h2>
+            <p className="text-xs text-blue-300 mb-3">以下掃描記錄已被伺服器拒絕，不會重新發送。<br />The following scans were permanently refused by the server.</p>
+            <div className="flex flex-col gap-2">
+              {refusedScans.map((s) => (
+                <div key={s.id} className="flex items-center justify-between bg-blue-900 rounded-xl px-3 py-2">
+                  <div className="text-sm">
+                    <div className="font-semibold">{s.uid} · 餐 {s.mealId}</div>
+                    <div className="text-xs text-blue-300">{formatRefusedReason(s.refused ?? '')}</div>
+                    <div className="text-xs text-blue-400">{new Date(s.scannedAt).toLocaleString()}</div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (s.id != null) await dismissRefusedScan(s.id)
+                      await refreshPendingCount()
+                      if (refusedScans.length <= 1) setShowRefused(false)
+                    }}
+                    className="ml-3 text-xs bg-red-800 hover:bg-red-700 text-white px-3 py-1 rounded-lg shrink-0"
+                  >
+                    清除 Dismiss
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setShowRefused(false)} className="mt-4 w-full py-2 text-sm text-blue-300 border border-blue-700 rounded-xl">關閉 Close</button>
+          </div>
+        </div>
+      )}
 
       {/* Top tab bar */}
       <nav className="flex bg-blue-900 border-b border-blue-700 shrink-0">

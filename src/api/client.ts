@@ -69,13 +69,13 @@ export const syncApi = {
     api.get<CachedRegisterMeal[]>('/scan/sync/register-meals'),
 
   scans: () =>
-    api.get<{ uid: string; mealId: number; scannedAt: string }[]>('/scan/sync/scans'),
+    api.get<{ uid: string; mealId: number; scannedAt: string; clientScanId?: string }[]>('/scan/sync/scans'),
 
   voidedScans: () =>
     api.get<{ uid: string; mealId: number }[]>('/scan/sync/voided-scans'),
 
   flushScans: (scans: ScanRequest[]) =>
-    api.post<{ accepted: number[] }>('/scan/sync/flush', scans),
+    api.post<{ accepted: string[]; rejected: { localId: string; reason: string }[] }>('/scan/sync/flush', scans),
 
   checkIn: (uid: string) =>
     api.post<{ success: boolean; error?: string; name: string; checkinTime: string; alreadyCheckedIn: boolean }>(

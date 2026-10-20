@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import QrScanner from '../components/QrScanner'
-import { db, lookupByUid, queueScan, markSynced, type CachedMeal, type CachedRegisterMeal } from '../db/localDb'
+import { db, lookupByUid, queueScan, markSynced, markRefused, type CachedMeal, type CachedRegisterMeal } from '../db/localDb'
 import { scanApi } from '../api/client'
 import { playSuccess, playExceeded, playError } from '../utils/sound'
 
@@ -127,7 +127,17 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
         // the warm-up cycle ran, inflating household pickup history and quota.
         scanApi.scan(uid, mealId, localClientScanId)
           .then(() => { if (localQueueId != null) markSynced(localQueueId) })
-          .catch(() => {})
+          .catch((err) => {
+            const status = err?.response?.status
+            const msg: string = err?.response?.data?.message ?? err?.response?.data ?? ''
+            if (status === 409) {
+              // Server says quota exceeded — permanently refuse this row
+              if (localQueueId != null) markRefused(localQueueId, '已超過訂餐數量 Over the family\'s order')
+            } else if (status === 404 || status === 422) {
+              if (localQueueId != null) markRefused(localQueueId, msg || `HTTP ${status}`)
+            }
+            // 429 or network error: leave pending — flush will retry
+          })
       }
 
       // Household-wide pickup list for this meal, including the scan just queued above.

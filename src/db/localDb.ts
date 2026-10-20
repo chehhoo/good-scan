@@ -40,6 +40,7 @@ export interface ScanQueueItem {
   scannedAt: string     // ISO timestamp
   synced: boolean       // false = pending flush to good-api
   clientScanId: string  // UUID — dedup key sent to server with every copy of this scan
+  refused?: string      // set to rejection reason when server permanently refuses this scan
   syncError?: string    // last error if sync failed
 }
 
@@ -97,7 +98,8 @@ export async function lookupByUid(uid: string) {
   const pickupsByMeal: Record<number, { uid: string; name: string; scannedAt: string }[]> = {}
   for (const mealId of mealIds) {
     const entries = await db.scanQueue.where('mealId').equals(mealId).toArray()
-    const householdEntries = entries.filter((e) => householdUids.has(e.uid))
+    // Refused rows don't count toward the family's taken total or pickup history
+    const householdEntries = entries.filter((e) => householdUids.has(e.uid) && !e.refused)
     takenCounts[mealId] = householdEntries.length
     pickupsByMeal[mealId] = householdEntries.map((e) => ({
       uid: e.uid,
@@ -125,8 +127,20 @@ export async function markSynced(id: number) {
   return db.scanQueue.update(id, { synced: true })
 }
 
+export async function markRefused(id: number, reason: string) {
+  return db.scanQueue.update(id, { refused: reason })
+}
+
 export async function getPendingScans(): Promise<ScanQueueItem[]> {
-  return db.scanQueue.filter((s) => s.synced === false).toArray()
+  return db.scanQueue.filter((s) => s.synced === false && !s.refused).toArray()
+}
+
+export async function getRefusedScans(): Promise<ScanQueueItem[]> {
+  return db.scanQueue.filter((s) => !!s.refused).toArray()
+}
+
+export async function dismissRefusedScan(id: number) {
+  return db.scanQueue.delete(id)
 }
 
 export async function getLastSyncTime(): Promise<Date | null> {
