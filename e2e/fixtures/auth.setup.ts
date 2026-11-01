@@ -1,22 +1,17 @@
 import { test as setup } from '@playwright/test'
-import { TEST_TOKEN } from './test-data'
+import { mockSyncEndpoints } from './mock-api'
 
 const AUTH_FILE = 'e2e/fixtures/.auth.json'
 
 setup('authenticate as volunteer', async ({ page }) => {
-  await page.route('**/api/auth/volunteer', (route) =>
-    route.fulfill({ json: { token: TEST_TOKEN, eventId: 1, eventName: 'E2E Test Camp' } })
-  )
-  await page.route('**/api/register/event-info', (route) =>
-    route.fulfill({ json: { id: 1, name: 'E2E 測試營', nameEng: 'E2E Test Camp' } })
-  )
+  await mockSyncEndpoints(page)
 
   await page.goto('/')
   await page.locator('input[type="text"]').fill('TESTCODE')
   await page.locator('button:has-text("登入")').click()
 
-  // Wait until the app moves past the login screen
-  await page.waitForSelector('text=餐食 Meal')
+  // Wait for full sync to confirm login succeeded and warmUpCache ran
+  await page.waitForSelector('text=在線 Online', { timeout: 15_000 })
 
   await page.context().storageState({ path: AUTH_FILE })
 })

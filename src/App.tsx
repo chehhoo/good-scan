@@ -4,6 +4,7 @@ import CheckIn from './pages/CheckIn'
 import MealInfo from './pages/MealInfo'
 import LoginPage from './pages/LoginPage'
 import StatusDot from './components/StatusDot'
+import UpdatePrompt from './components/UpdatePrompt'
 import { db, markSynced, markRefused, getPendingScans, getRefusedScans, dismissRefusedScan, type ScanQueueItem } from './db/localDb'
 import { syncApi, eventApi, type ActiveEvent } from './api/client'
 
@@ -244,6 +245,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen max-h-screen overflow-hidden bg-blue-950 text-white">
+      <UpdatePrompt />
       {/* Header with status dot */}
       <header className="flex items-center justify-between px-4 py-2 bg-blue-950 border-b border-blue-800 shrink-0">
         <div className="flex items-center gap-2">
