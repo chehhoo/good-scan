@@ -42,13 +42,13 @@ export default defineConfig({
       dependencies: ['setup'],
       testIgnore: '**/integration.spec.ts',
     },
-    {
-      // Integration project: real good-api, no mocks, no saved auth state.
-      // Run with: E2E_ACCESS_CODE=GOSPEL2026 npx playwright test --project=integration
+    // Integration project only runs locally — skipped in CI (requires good-api + Docker).
+    // Run with: E2E_ACCESS_CODE=GOSPEL2026 npx playwright test --project=integration
+    ...(process.env.CI ? [] : [{
       name: 'integration',
       use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5173' },
       testMatch: '**/integration.spec.ts',
-    },
+    }]),
   ],
 
   webServer: [
@@ -59,12 +59,12 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
     },
-    {
-      // Integration suite — standard port 5173 (proxies /api → localhost:8090)
+    // Integration dev server only needed locally
+    ...(process.env.CI ? [] : [{
       command: 'npm run dev -- --port 5173',
       url: 'http://localhost:5173',
-      reuseExistingServer: true,   // reuse if already running; don't start in CI
+      reuseExistingServer: true,
       timeout: 30_000,
-    },
+    }]),
   ],
 })
