@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { authApi } from '../api/client'
+import InstallBanner from '../components/InstallBanner'
 
 interface Props {
   onLogin: (token: string) => void
@@ -79,6 +80,8 @@ export default function LoginPage({ onLogin }: Props) {
         <br />
         Contact event admin for the access code
       </p>
+
+      <InstallBanner />
 
       <span className="text-blue-700 text-xs select-none">v{__APP_VERSION__}</span>
     </div>
