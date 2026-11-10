@@ -48,6 +48,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
   const [selectedMealId, setSelectedMealId] = useState<number | undefined>(undefined)
   const [loading, setLoading] = useState(false)
   const loadingRef = useRef(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [manualUid, setManualUid] = useState('')
   const manualInputRef = useRef<HTMLInputElement>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
@@ -243,16 +244,21 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
       <MealPillBar
         meals={meals}
         selectedMealId={selectedMealId}
-        onSelect={(id) => { setSelectedMealId(id); reset() }}
+        onSelect={(id) => { setSelectedMealId(id); if (result) reset() }}
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
       />
 
       {/* Camera scanner */}
       {scanning && !loading && (
         <div className="flex-1 flex flex-col">
-          <QrScanner onScan={handleScan} active={scanning} />
+          <QrScanner onScan={handleScan} active={scanning && !pickerOpen} />
 
-          {/* Active meal context — large and readable below the viewfinder */}
-          <div className="bg-blue-950 border-b border-blue-800 px-4 py-3 flex items-center gap-3">
+          {/* Active meal context — tappable shortcut to open meal picker */}
+          <button
+            onClick={() => setPickerOpen(true)}
+            className="bg-blue-950 border-b border-blue-800 px-4 py-3 flex items-center gap-3 w-full text-left active:bg-blue-900 transition-colors"
+          >
             {activeMeal ? (
               <>
                 <div className="flex-1 min-w-0">
@@ -268,11 +274,12 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
                   </div>
                 </div>
                 {activeMeal.location ? <LocationBadge locationId={activeMeal.location} /> : null}
+                <span className="text-blue-500 text-xs shrink-0">▾</span>
               </>
             ) : (
-              <span className="text-amber-400 font-semibold text-sm">⚠ 請選擇餐次 Choose meal</span>
+              <span className="text-amber-400 font-semibold text-sm">⚠ 請選擇餐次 Choose meal ▾</span>
             )}
-          </div>
+          </button>
           {manualEntryEnabled && (
             <div className="p-3 border-t border-blue-800 flex gap-2">
               <input
@@ -527,12 +534,16 @@ function MealPillBar({
   meals,
   selectedMealId,
   onSelect,
+  open,
+  onOpenChange,
 }: {
   meals: CachedMeal[]
   selectedMealId: number | undefined
   onSelect: (id: number | undefined) => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }) {
-  const [open, setOpen] = useState(false)
+  const changeOpen = onOpenChange
   const hasAutoOpened = useRef(false)
 
   const autoDetected = useMemo(() => detectCurrentMeal(meals), [meals])
@@ -545,7 +556,7 @@ function MealPillBar({
   useEffect(() => {
     if (!hasAutoOpened.current && meals.length > 0 && effectiveId === undefined) {
       hasAutoOpened.current = true
-      setOpen(true)
+      changeOpen(true)
     }
   }, [meals.length, effectiveId])
 
@@ -556,7 +567,7 @@ function MealPillBar({
       {/* Compact single-line bar */}
       <button
         data-testid="meal-bar"
-        onClick={() => setOpen(true)}
+        onClick={() => changeOpen(true)}
         className="w-full flex items-center gap-2 px-4 border-b border-blue-800 bg-blue-950 active:bg-blue-900 transition-colors"
         style={{ minHeight: 48 }}
       >
@@ -581,14 +592,14 @@ function MealPillBar({
       {open && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
+          <div className="absolute inset-0 bg-black/60" onClick={() => changeOpen(false)} />
 
           {/* Sheet */}
           <div className="relative bg-blue-950 rounded-t-2xl max-h-[70vh] flex flex-col shadow-2xl">
             {/* Handle + header */}
             <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-blue-800">
               <span className="text-sm font-semibold text-white">選擇餐次 Choose meal</span>
-              <button onClick={() => setOpen(false)} className="text-blue-400 text-xl leading-none px-1">✕</button>
+              <button onClick={() => changeOpen(false)} className="text-blue-400 text-xl leading-none px-1">✕</button>
             </div>
 
             {/* Scrollable meal list grouped by date */}
@@ -616,7 +627,7 @@ function MealPillBar({
                             key={m.id}
                             onClick={() => {
                               onSelect(m.id === selectedMealId ? undefined : m.id)
-                              setOpen(false)
+                              changeOpen(false)
                             }}
                             className={[
                               'flex-1 rounded-xl py-3 px-2 flex flex-col items-center gap-1 transition-all active:scale-95',
@@ -643,7 +654,7 @@ function MealPillBar({
             {!isAuto && (
               <div className="px-4 py-3 border-t border-blue-800">
                 <button
-                  onClick={() => { onSelect(undefined); setOpen(false) }}
+                  onClick={() => { onSelect(undefined); changeOpen(false) }}
                   className="w-full py-2.5 rounded-xl bg-blue-900 text-blue-300 text-sm border border-blue-700 active:bg-blue-800"
                 >
                   重置自動檢測 Reset to auto-detect
