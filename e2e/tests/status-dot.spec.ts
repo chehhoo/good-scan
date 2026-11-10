@@ -13,7 +13,9 @@ test.describe('StatusDot', () => {
     await page.goto('/')
     await expect(page.getByText('在線 Online')).toBeVisible({ timeout: 15_000 })
 
-    // Set lastCacheSyncAt to 31 minutes ago to force stale state
+    // Abort sync calls on reload so warmUpCache fails and stale state persists.
+    // Without this, mocked sync completes in <5s and races the stale assertion.
+    await page.route('**/api/scan/sync/**', route => route.abort())
     await page.evaluate(() => {
       const stale = new Date(Date.now() - 31 * 60 * 1000).toISOString()
       localStorage.setItem('lastCacheSyncAt', stale)
@@ -27,14 +29,17 @@ test.describe('StatusDot', () => {
     await page.goto('/')
     await expect(page.getByText('在線 Online')).toBeVisible({ timeout: 15_000 })
 
+    // Abort sync on reload so stale state is reliably visible before clicking
+    await page.route('**/api/scan/sync/**', route => route.abort())
     await page.evaluate(() => {
       const stale = new Date(Date.now() - 31 * 60 * 1000).toISOString()
       localStorage.setItem('lastCacheSyncAt', stale)
     })
     await page.reload()
-    await expect(page.getByText('緩存過期 · 點擊同步')).toBeVisible()
+    await expect(page.getByText('緩存過期 · 點擊同步')).toBeVisible({ timeout: 5_000 })
 
-    // Button is disabled while syncing; use force:true to click it in its enabled stale state
+    // Re-register sync mocks (LIFO — takes priority over abort handler) so re-sync succeeds
+    await mockSyncEndpoints(page)
     await page.getByText('緩存過期 · 點擊同步').click({ force: true })
     await expect(page.getByText('在線 Online')).toBeVisible({ timeout: 10_000 })
   })
