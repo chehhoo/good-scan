@@ -5,8 +5,7 @@ function getCtx(): AudioContext {
   return ctx
 }
 
-function beep(freq: number, duration: number, type: OscillatorType, gain: number, startTime: number): void {
-  const ac = getCtx()
+function schedule(ac: AudioContext, freq: number, duration: number, type: OscillatorType, gain: number, startTime: number): void {
   const osc = ac.createOscillator()
   const env = ac.createGain()
   osc.connect(env)
@@ -20,25 +19,36 @@ function beep(freq: number, duration: number, type: OscillatorType, gain: number
   osc.stop(startTime + duration + 0.01)
 }
 
+// Mobile Chrome creates AudioContext in 'suspended' state; resume() is needed
+// before reading currentTime so oscillators play at the correct moment.
+async function play(notes: Array<[number, number, OscillatorType, number, number]>): Promise<void> {
+  const ac = getCtx()
+  if (ac.state === 'suspended') await ac.resume()
+  const now = ac.currentTime
+  for (const [freq, duration, type, gain, offset] of notes) {
+    schedule(ac, freq, duration, type, gain, now + offset)
+  }
+}
+
 /** Two rising tones — pleasant chime for a successful scan */
 export function playSuccess(): void {
-  const ac = getCtx()
-  const now = ac.currentTime
-  beep(523, 0.12, 'sine', 0.4, now)          // C5
-  beep(784, 0.18, 'sine', 0.35, now + 0.11)  // G5
+  void play([
+    [523, 0.12, 'sine', 0.4, 0],
+    [784, 0.18, 'sine', 0.35, 0.11],
+  ])
 }
 
 /** Descending harsh tones — quota exceeded */
 export function playExceeded(): void {
-  const ac = getCtx()
-  const now = ac.currentTime
-  beep(330, 0.14, 'sawtooth', 0.25, now)         // E4
-  beep(220, 0.20, 'sawtooth', 0.22, now + 0.13)  // A3
+  void play([
+    [330, 0.14, 'sawtooth', 0.25, 0],
+    [220, 0.20, 'sawtooth', 0.22, 0.13],
+  ])
 }
 
 /** Single flat low buzz — error (not found, system error) */
 export function playError(): void {
-  const ac = getCtx()
-  const now = ac.currentTime
-  beep(180, 0.30, 'square', 0.20, now)
+  void play([
+    [180, 0.30, 'square', 0.20, 0],
+  ])
 }
