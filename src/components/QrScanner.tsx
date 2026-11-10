@@ -10,6 +10,8 @@ export default function QrScanner({ onScan, active }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const readerRef = useRef<BrowserMultiFormatReader | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const onScanRef = useRef(onScan)
+  useEffect(() => { onScanRef.current = onScan }, [onScan])
 
   useEffect(() => {
     if (!active) {
@@ -22,7 +24,7 @@ export default function QrScanner({ onScan, active }: Props) {
 
     reader.decodeFromVideoDevice(null, videoRef.current!, (result, err) => {
       if (result) {
-        onScan(result.getText())
+        onScanRef.current(result.getText())
       } else if (err && !(err instanceof NotFoundException) && !(err instanceof ChecksumException) && !(err instanceof FormatException)) {
         setError('Camera error: ' + err.message)
       }
@@ -31,7 +33,7 @@ export default function QrScanner({ onScan, active }: Props) {
     return () => {
       reader.reset()
     }
-  }, [active, onScan])
+  }, [active])
 
   if (error) {
     return (
