@@ -238,7 +238,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
       <MealPillBar
         meals={meals}
         selectedMealId={selectedMealId}
-        onSelect={setSelectedMealId}
+        onSelect={(id) => { setSelectedMealId(id); reset() }}
       />
 
       {/* Camera scanner */}
