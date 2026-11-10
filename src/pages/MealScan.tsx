@@ -81,8 +81,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
       const name = profile.cnName || `${profile.firstName} ${profile.lastName}`
       onScan?.(uid)
 
-      const allMeals = await db.meals.toArray()
-      const mealId = selectedMealId ?? detectCurrentMeal(allMeals)
+      const mealId = selectedMealId ?? detectCurrentMeal(meals)
       if (!mealId) {
         playError()
         setResult({
@@ -94,7 +93,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
         return
       }
 
-      const meal = allMeals.find((m) => m.id === mealId)
+      const meal = meals.find((m) => m.id === mealId)
       const mealLabel = meal ? mealTypeLabel(meal.type) : ''
       const rm = registerMeals.find((r) => r.mealId === mealId)
       const ordered = rm?.qty ?? 0
@@ -176,7 +175,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
       // loadingRef stays true until reset() — prevents any stray camera callback
       // from re-entering handleScan while the result screen is visible.
     }
-  }, [selectedMealId, onCacheMiss])
+  }, [meals, selectedMealId, onCacheMiss])
 
   const startVoice = () => {
     const SpeechRecognition = window.SpeechRecognition ?? (window as any).webkitSpeechRecognition

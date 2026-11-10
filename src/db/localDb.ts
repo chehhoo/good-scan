@@ -78,30 +78,34 @@ export async function lookupByUid(uid: string) {
   }
   if (!profile) return null
 
-  const registerMeals = await db.registerMeals
-    .where('householdId').equals(profile.householdId)
-    .toArray()
+  // Fetch registerMeals and all household profiles in parallel
+  const [registerMeals, householdProfiles] = await Promise.all([
+    db.registerMeals.where('householdId').equals(profile.householdId).toArray(),
+    // Meal entitlement (qty) is household-level, so pickups must be tallied across
+    // every member of the household, not just the scanned uid — otherwise each
+    // family member's own scan history looks empty and the shared quota (e.g. 2
+    // dinners for a 2-person household) is never actually enforced: everyone would
+    // independently see "0 of my own scans yet" and be allowed to take a box.
+    db.profiles.where('householdId').equals(profile.householdId).toArray(),
+  ])
 
   const mealIds = registerMeals.map((rm) => rm.mealId)
-  const meals = await db.meals.where('id').anyOf(mealIds).toArray()
-
-  // Meal entitlement (qty) is household-level, so pickups must be tallied across
-  // every member of the household, not just the scanned uid — otherwise each
-  // family member's own scan history looks empty and the shared quota (e.g. 2
-  // dinners for a 2-person household) is never actually enforced: everyone would
-  // independently see "0 of my own scans yet" and be allowed to take a box.
-  const householdProfiles = await db.profiles.where('householdId').equals(profile.householdId).toArray()
   const nameByUid = new Map(householdProfiles.map((p) => [p.uid, p.cnName || `${p.firstName} ${p.lastName}`]))
-  const householdUids = new Set(householdProfiles.map((p) => p.uid))
+  const householdUids = householdProfiles.map((p) => p.uid)
 
+  // Fetch meals and all household scan records in parallel (one scan query instead of N)
+  const [meals, allScanEntries] = await Promise.all([
+    db.meals.where('id').anyOf(mealIds).toArray(),
+    db.scanQueue.where('uid').anyOf(householdUids).toArray(),
+  ])
+
+  const validEntries = allScanEntries.filter((e) => !e.refused)
   const takenCounts: Record<number, number> = {}
   const pickupsByMeal: Record<number, { uid: string; name: string; scannedAt: string }[]> = {}
   for (const mealId of mealIds) {
-    const entries = await db.scanQueue.where('mealId').equals(mealId).toArray()
-    // Refused rows don't count toward the family's taken total or pickup history
-    const householdEntries = entries.filter((e) => householdUids.has(e.uid) && !e.refused)
-    takenCounts[mealId] = householdEntries.length
-    pickupsByMeal[mealId] = householdEntries.map((e) => ({
+    const entries = validEntries.filter((e) => e.mealId === mealId)
+    takenCounts[mealId] = entries.length
+    pickupsByMeal[mealId] = entries.map((e) => ({
       uid: e.uid,
       name: nameByUid.get(e.uid) ?? e.uid,
       scannedAt: e.scannedAt,
