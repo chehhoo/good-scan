@@ -73,8 +73,8 @@ export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss }: {
       playError()
       setError('系統錯誤 System error: ' + String(e))
     } finally {
-      loadingRef.current = false
       setLoading(false)
+      // loadingRef stays true until reset() — same guard as MealScan
     }
   }, [onCacheMiss])
 
@@ -109,6 +109,7 @@ export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss }: {
   }
 
   const reset = () => {
+    loadingRef.current = false
     setResult(null)
     setError(null)
     setScanning(true)

@@ -172,8 +172,9 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
         trackers: [], mealPlans: [],
       })
     } finally {
-      loadingRef.current = false
       setLoading(false)
+      // loadingRef stays true until reset() — prevents any stray camera callback
+      // from re-entering handleScan while the result screen is visible.
     }
   }, [selectedMealId, onCacheMiss])
 
@@ -208,6 +209,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
   }, [manualUid, handleScan])
 
   const reset = () => {
+    loadingRef.current = false
     setResult(null)
     setScanning(true)
     setManualUid('')
