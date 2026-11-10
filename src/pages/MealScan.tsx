@@ -215,6 +215,11 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
     setTimeout(() => manualInputRef.current?.focus(), 100)
   }
 
+  const activeMeal = useMemo(() => {
+    const id = selectedMealId ?? detectCurrentMeal(meals)
+    return meals.find((m) => m.id === id)
+  }, [meals, selectedMealId])
+
   const statusConfig = result ? {
     ok:       { bg: 'bg-green-900',  border: 'border-green-700',  icon: '✓', iconBg: 'bg-green-500',   text: 'text-green-300',   zh: '成功！請拿飯盒',   en: 'MEAL SERVED' },
     exceeded: { bg: 'bg-amber-950',  border: 'border-amber-700',  icon: '⚠', iconBg: 'bg-amber-500',   text: 'text-amber-300',   zh: '抱歉！已領了全部', en: 'QUOTA EXCEEDED' },
@@ -245,6 +250,29 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
       {scanning && !loading && (
         <div className="flex-1 flex flex-col">
           <QrScanner onScan={handleScan} active={scanning} />
+
+          {/* Active meal context — large and readable below the viewfinder */}
+          <div className="bg-blue-950 border-b border-blue-800 px-4 py-3 flex items-center gap-3">
+            {activeMeal ? (
+              <>
+                <div className="flex-1 min-w-0">
+                  <div className="text-white font-bold text-lg leading-tight">
+                    {mealTypeShort(activeMeal.type)}
+                    <span className="ml-2 text-sm font-normal text-blue-300">
+                      {activeMeal.type === 1 ? 'Breakfast' : activeMeal.type === 2 ? 'Lunch' : 'Dinner'}
+                    </span>
+                  </div>
+                  <div className="text-blue-300 text-sm mt-0.5">
+                    {formatDate(activeMeal.date)}
+                    <span className="text-blue-500 ml-2">{activeMeal.startTime.slice(0, 5)}–{activeMeal.endTime.slice(0, 5)}</span>
+                  </div>
+                </div>
+                {activeMeal.location ? <LocationBadge locationId={activeMeal.location} /> : null}
+              </>
+            ) : (
+              <span className="text-amber-400 font-semibold text-sm">⚠ 請選擇餐次 Choose meal</span>
+            )}
+          </div>
           {manualEntryEnabled && (
             <div className="p-3 border-t border-blue-800 flex gap-2">
               <input
