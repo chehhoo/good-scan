@@ -23,7 +23,7 @@ export async function mockCurrentTime(page: Page, hhMm: string) {
  */
 export async function mockSyncEndpoints(
   page: Page,
-  overrides: { meals?: unknown[]; registerMeals?: unknown[] } = {}
+  overrides: { meals?: unknown[]; registerMeals?: unknown[]; scans?: unknown[] } = {}
 ) {
   await page.route('**/api/auth/volunteer', (r) =>
     r.fulfill({ json: { token: TEST_TOKEN, eventId: 1, eventName: 'E2E Test Camp' } })
@@ -44,7 +44,7 @@ export async function mockSyncEndpoints(
     r.fulfill({ json: [] })
   )
   await page.route('**/api/scan/sync/scans', (r) =>
-    r.fulfill({ json: [] })
+    r.fulfill({ json: overrides.scans ?? [] })
   )
 }
 
