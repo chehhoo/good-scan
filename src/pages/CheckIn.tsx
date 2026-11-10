@@ -20,13 +20,15 @@ export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss }: {
   const [result, setResult] = useState<CheckInResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const loadingRef = useRef(false)
   const [manualUid, setManualUid] = useState('')
   const [listening, setListening] = useState(false)
   const manualInputRef = useRef<HTMLInputElement>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
 
   const handleScan = useCallback(async (uid: string) => {
-    if (loading) return
+    if (loadingRef.current) return
+    loadingRef.current = true
     setScanning(false)
     setLoading(true)
     setError(null)
@@ -71,9 +73,10 @@ export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss }: {
       playError()
       setError('系統錯誤 System error: ' + String(e))
     } finally {
+      loadingRef.current = false
       setLoading(false)
     }
-  }, [loading, onCacheMiss])
+  }, [onCacheMiss])
 
   const submitManualUid = useCallback(() => {
     const uid = manualUid.trim()

@@ -47,13 +47,15 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
   )
   const [selectedMealId, setSelectedMealId] = useState<number | undefined>(undefined)
   const [loading, setLoading] = useState(false)
+  const loadingRef = useRef(false)
   const [manualUid, setManualUid] = useState('')
   const manualInputRef = useRef<HTMLInputElement>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const [listening, setListening] = useState(false)
 
   const handleScan = useCallback(async (uid: string) => {
-    if (loading) return
+    if (loadingRef.current) return
+    loadingRef.current = true
     setScanning(false)
     setLoading(true)
 
@@ -170,9 +172,10 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
         trackers: [], mealPlans: [],
       })
     } finally {
+      loadingRef.current = false
       setLoading(false)
     }
-  }, [loading, selectedMealId, onCacheMiss])
+  }, [selectedMealId, onCacheMiss])
 
   const startVoice = () => {
     const SpeechRecognition = window.SpeechRecognition ?? (window as any).webkitSpeechRecognition
