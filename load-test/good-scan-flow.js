@@ -47,7 +47,6 @@
 import http from 'k6/http';
 import { check, sleep, group } from 'k6';
 import { Trend, Counter, Rate } from 'k6/metrics';
-import { SharedArray } from 'k6/data';
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
@@ -64,53 +63,45 @@ const JITTER = Math.max(1, Math.floor(SCAN_INTERVAL * 0.25));
 
 // ── Custom Metrics ──────────────────────────────────────────────────────────
 
-// Latencies
-const warmupDuration  = new Trend('warmup_duration_ms',  true);  // full 5-GET warm-up round-trip
-const profilesDuration = new Trend('profiles_duration_ms', true); // GET /profiles alone
-const mealsDuration   = new Trend('meals_duration_ms',   true);
-const scanDuration    = new Trend('scan_duration_ms',    true);   // POST /meal/scan
-const flushDuration   = new Trend('flush_duration_ms',   true);   // POST /scan/sync/flush
+const warmupDuration   = new Trend('warmup_duration_ms',   true);
+const profilesDuration = new Trend('profiles_duration_ms', true);
+const mealsDuration    = new Trend('meals_duration_ms',    true);
+const scanDuration     = new Trend('scan_duration_ms',     true);
+const flushDuration    = new Trend('flush_duration_ms',    true);
 
-// Counters
-const scansAccepted  = new Counter('scans_accepted');   // new scan recorded (201)
-const scansQuotaFull = new Counter('scans_quota_full'); // household quota exceeded (409)
-const scansRejected  = new Counter('scans_rejected');   // other 4xx
-const scansErrored   = new Counter('scans_errored');    // 5xx / network error
-const flushAccepted  = new Counter('flush_accepted');   // scans accepted by flush
-const warmupErrors   = new Counter('warmup_errors');    // failed sync GETs
+const scansAccepted  = new Counter('scans_accepted');
+const scansQuotaFull = new Counter('scans_quota_full');
+const scansRejected  = new Counter('scans_rejected');
+const scansErrored   = new Counter('scans_errored');
+const flushAccepted  = new Counter('flush_accepted');
+const warmupErrors   = new Counter('warmup_errors');
 
-// Rates
-const scanSuccessRate  = new Rate('scan_success_rate');   // 201 or 409 both fine
-const flushSuccessRate = new Rate('flush_success_rate');  // 200 with accepted[]
-const warmupSuccess    = new Rate('warmup_success_rate'); // all 5 GETs returned 200
+const scanSuccessRate  = new Rate('scan_success_rate');
+const flushSuccessRate = new Rate('flush_success_rate');
+const warmupSuccess    = new Rate('warmup_success_rate');
 
 // ── k6 Options ─────────────────────────────────────────────────────────────
 
 export const options = {
   scenarios: {
-    // Scenario A: full volunteer device lifecycle (scan + flush + re-sync)
     volunteer_devices: {
       executor: 'ramping-vus',
       startVUs: 0,
       stages: [
-        { duration: '20s', target: DEVICES }, // ramp: devices start up, warm up cache
-        { duration: DURATION, target: DEVICES }, // hold: steady scan load
+        { duration: '20s', target: DEVICES },
+        { duration: DURATION, target: DEVICES },
         { duration: '10s', target: 0 },
       ],
       gracefulRampDown: '15s',
       exec: 'deviceLifecycle',
     },
-
-    // Scenario B: reconnect spike — all devices hit warmUpCache at the same time
-    // Models volunteers reconnecting after hotel WiFi drops during a meal.
-    // Starts after main scenario is already running.
     reconnect_spike: {
       executor: 'ramping-vus',
       startVUs: 0,
-      startTime: '30s', // let device_lifecycle settle first
+      startTime: '30s',
       stages: [
-        { duration: '5s',  target: RECONNECT_VUS }, // sudden reconnect
-        { duration: '30s', target: RECONNECT_VUS }, // hold spike
+        { duration: '5s',  target: RECONNECT_VUS },
+        { duration: '30s', target: RECONNECT_VUS },
         { duration: '5s',  target: 0 },
       ],
       exec: 'warmupOnly',
@@ -118,34 +109,27 @@ export const options = {
   },
 
   thresholds: {
-    // Warm-up (5 GETs) should complete in under 3s p95
-    warmup_duration_ms:    ['p(95)<3000', 'p(99)<5000'],
-    // Individual sync GETs under 1s p95
-    profiles_duration_ms:  ['p(95)<1000'],
-    meals_duration_ms:     ['p(95)<1000'],
-    // Scan endpoint under 1s p95
-    scan_duration_ms:      ['p(95)<1000', 'p(99)<2000'],
-    // Flush endpoint under 1s p95
-    flush_duration_ms:     ['p(95)<1000'],
-    // Hard failure caps
-    scans_errored:         ['count<10'],
-    warmup_errors:         ['count<5'],
-    // Success rates
-    scan_success_rate:     ['rate>0.98'],
-    flush_success_rate:    ['rate>0.98'],
-    warmup_success_rate:   ['rate>0.99'],
-    http_req_failed:       ['rate<0.05'],
+    warmup_duration_ms:   ['p(95)<3000', 'p(99)<5000'],
+    profiles_duration_ms: ['p(95)<1000'],
+    meals_duration_ms:    ['p(95)<1000'],
+    scan_duration_ms:     ['p(95)<1000', 'p(99)<2000'],
+    flush_duration_ms:    ['p(95)<1000'],
+    scans_errored:        ['count<10'],
+    warmup_errors:        ['count<5'],
+    scan_success_rate:    ['rate>0.98'],
+    flush_success_rate:   ['rate>0.98'],
+    warmup_success_rate:  ['rate>0.99'],
+    http_req_failed:      ['rate<0.05'],
   },
 };
 
-// ── Setup: login + fetch UID list (runs once before all VUs start) ──────────
+// ── Setup ──────────────────────────────────────────────────────────────────
 
 export function setup() {
   console.log(`=== good-scan load test ===`);
   console.log(`Target:  ${BASE_URL}`);
   console.log(`Devices: ${DEVICES} | MealID: ${MEAL_ID} | ScanInterval: ${SCAN_INTERVAL}s`);
 
-  // 1. Login
   const loginRes = http.post(
     `${BASE_URL}/api/auth/volunteer`,
     JSON.stringify({ code: VOLUNTEER_CODE }),
@@ -157,7 +141,6 @@ export function setup() {
   const token = loginRes.json('token');
   console.log(`Login OK — got volunteer JWT`);
 
-  // 2. Fetch profiles to build UID list (same call good-scan makes in warmUpCache)
   const profilesRes = http.get(
     `${BASE_URL}/api/scan/sync/profiles`,
     { headers: { Authorization: `Bearer ${token}` } }
@@ -172,7 +155,6 @@ export function setup() {
   }
   console.log(`Loaded ${uids.length} attendee UIDs`);
 
-  // 3. Fetch meal IDs for the active event (used to cross-check MEAL_ID)
   const mealsRes = http.get(
     `${BASE_URL}/api/scan/sync/meals`,
     { headers: { Authorization: `Bearer ${token}` } }
@@ -195,15 +177,12 @@ export function deviceLifecycle(data) {
     Authorization:  `Bearer ${token}`,
   };
 
-  // On first iteration each VU does a full cache warm-up (like app startup)
   if (__ITER === 0) {
     group('cache_warmup', () => doWarmup(headers));
   }
 
-  // Pick UID: spread devices across UID list to minimise repeated-person 409s
   const uid = pickUid(uids, __VU, __ITER, DEVICES);
 
-  // ── Real-time scan (good-scan fires this immediately on QR code result) ──
   group('meal_scan', () => {
     const t0 = Date.now();
     const res = http.post(
@@ -222,13 +201,13 @@ export function deviceLifecycle(data) {
     if (quota)              scansQuotaFull.add(1);
     if (err4x)              scansRejected.add(1);
     if (err5x)              scansErrored.add(1);
-    scanSuccessRate.add(ok || quota); // quota-full is an expected outcome, not a failure
+    scanSuccessRate.add(ok || quota);
 
     check(res, {
-      'scan: new record (201)':      r => r.status === 201,
-      'scan: idempotent (200)':      r => r.status === 200,
-      'scan: quota full (409)':      r => r.status === 409,
-      'scan: no server error':       r => r.status < 500,
+      'scan: new record (201)': r => r.status === 201,
+      'scan: idempotent (200)': r => r.status === 200,
+      'scan: quota full (409)': r => r.status === 409,
+      'scan: no server error':  r => r.status < 500,
     });
 
     if (err5x) {
@@ -236,16 +215,12 @@ export function deviceLifecycle(data) {
     }
   });
 
-  // Wait ~10s then flush (models good-scan's 10-second flush interval)
   const halfWait = Math.max(1, SCAN_INTERVAL / 2 - JITTER + Math.random() * JITTER * 2);
   sleep(halfWait);
 
-  // ── Flush queue (good-scan's POST /scan/sync/flush) ──────────────────────
   group('flush', () => {
-    // Simulate a single pending scan in the queue (1 item is the common case —
-    // the real-time scan already fired, so the queue has 0–1 items)
     const payload = [{
-      localId:   __VU * 10000 + __ITER, // unique per VU+iteration
+      localId:   __VU * 10000 + __ITER,
       uid:       uid,
       mealId:    MEAL_ID,
       scannedAt: new Date().toISOString(),
@@ -267,7 +242,7 @@ export function deviceLifecycle(data) {
     }
 
     check(res, {
-      'flush: 200 OK':        r => r.status === 200,
+      'flush: 200 OK':          r => r.status === 200,
       'flush: no server error': r => r.status < 500,
     });
 
@@ -276,13 +251,10 @@ export function deviceLifecycle(data) {
     }
   });
 
-  // Every 15th iteration re-sync the cache (models the 5-min re-sync interval
-  // compressed to fit the test duration)
   if (__ITER > 0 && __ITER % 15 === 0) {
     group('periodic_resync', () => doWarmup(headers));
   }
 
-  // Wait remaining half of scan interval before next scan
   const remainWait = Math.max(1, SCAN_INTERVAL / 2 - JITTER + Math.random() * JITTER * 2);
   sleep(remainWait);
 }
@@ -295,20 +267,14 @@ export function warmupOnly(data) {
     Authorization:  `Bearer ${data.token}`,
   };
   group('reconnect_warmup', () => doWarmup(headers));
-  // Brief pause between repeated reconnects in the spike window
   sleep(2 + Math.random() * 3);
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-/**
- * Full cache warm-up: fires 5 sync GETs, measures total wall-clock time.
- * Mirrors good-scan's Promise.all([profiles, meals, registerMeals, scans, voidedScans]).
- */
 function doWarmup(headers) {
   const t0 = Date.now();
 
-  // Fire all 5 sync endpoints in a batch (k6 http.batch = parallel requests)
   const responses = http.batch([
     ['GET', `${BASE_URL}/api/scan/sync/profiles`,        null, { headers, tags: { name: 'sync_profiles'       } }],
     ['GET', `${BASE_URL}/api/scan/sync/meals`,           null, { headers, tags: { name: 'sync_meals'          } }],
@@ -317,10 +283,8 @@ function doWarmup(headers) {
     ['GET', `${BASE_URL}/api/scan/sync/voided-scans`,    null, { headers, tags: { name: 'sync_voided'         } }],
   ]);
 
-  const wall = Date.now() - t0;
-  warmupDuration.add(wall);
+  warmupDuration.add(Date.now() - t0);
 
-  // Track individual endpoint latencies using response times k6 already measured
   const [profilesRes, mealsRes] = responses;
   if (profilesRes.timings) profilesDuration.add(profilesRes.timings.duration);
   if (mealsRes.timings)    mealsDuration.add(mealsRes.timings.duration);
@@ -330,23 +294,17 @@ function doWarmup(headers) {
   if (!allOk) {
     warmupErrors.add(1);
     responses.forEach((r, i) => {
-      if (r.status !== 200) {
-        console.warn(`VU${__VU} warmup[${i}] failed: ${r.status} ${r.url}`);
-      }
+      if (r.status !== 200) console.warn(`VU${__VU} warmup[${i}] failed: ${r.status} ${r.url}`);
     });
   }
 
-  check(responses[0], { 'warmup: profiles 200': r => r.status === 200 });
-  check(responses[1], { 'warmup: meals 200':    r => r.status === 200 });
+  check(responses[0], { 'warmup: profiles 200':  r => r.status === 200 });
+  check(responses[1], { 'warmup: meals 200':     r => r.status === 200 });
   check(responses[2], { 'warmup: reg-meals 200': r => r.status === 200 });
-  check(responses[3], { 'warmup: scans 200':    r => r.status === 200 });
-  check(responses[4], { 'warmup: voided 200':   r => r.status === 200 });
+  check(responses[3], { 'warmup: scans 200':     r => r.status === 200 });
+  check(responses[4], { 'warmup: voided 200':    r => r.status === 200 });
 }
 
-/**
- * Spreads VUs across the UID list so different devices mostly scan
- * different people, reducing 409 quota-exceeded noise.
- */
 function pickUid(uids, vu, iter, totalDevices) {
   const offset = (vu - 1) * Math.floor(uids.length / totalDevices);
   return uids[(offset + iter) % uids.length];
@@ -360,10 +318,10 @@ export function teardown(data) {
   console.log(`Devices: ${DEVICES} | MealID: ${MEAL_ID}`);
   console.log(`UIDs tested: ${data.uids.length}`);
   console.log('');
-  console.log('Key thresholds to check:');
-  console.log('  warmup_duration_ms   p95 < 3000ms  (cache warm-up under load)');
-  console.log('  scan_duration_ms     p95 < 1000ms  (real-time scan latency)');
-  console.log('  flush_duration_ms    p95 < 1000ms  (background flush latency)');
-  console.log('  scans_errored        count < 10    (hard server errors)');
-  console.log('  warmup_errors        count < 5     (sync endpoint failures)');
+  console.log('Key thresholds:');
+  console.log('  warmup_duration_ms  p95 < 3000ms');
+  console.log('  scan_duration_ms    p95 < 1000ms');
+  console.log('  flush_duration_ms   p95 < 1000ms');
+  console.log('  scans_errored       count < 10');
+  console.log('  warmup_errors       count < 5');
 }

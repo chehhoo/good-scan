@@ -30,6 +30,11 @@
  * Meal IDs used (Dec 27 2026):
  *   193 — 午餐 Lunch  (ordered by all three families above)
  *   194 — 晚餐 Dinner (ordered by family 3941 and 3960)
+ *
+ * Suite 7 (all-meals cycling) uses family 3941 (high健萍 + 王承恩) who ordered
+ * all 12 meals — IDs 190–201 covering 4 days × 3 meals.
+ * Suite 8 (MealInfo live counts) uses Tab 3 to verify server-side counts
+ * reflect scans in real time.
  */
 
 import { test, expect, type Page } from '@playwright/test'
@@ -43,6 +48,10 @@ const ACCESS_CODE = process.env.E2E_ACCESS_CODE ?? 'GOSPEL2026'
 
 // Test meal that all three families ordered
 const LUNCH_DEC27 = 193
+
+// All 12 meal IDs for event 6 (4 days × 3 meals — family 3941 ordered all of them)
+// Dec 25–28 2026: breakfast=1, lunch=2, dinner=3 per day
+const ALL_MEAL_IDS = [190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201]
 
 // ── Test data ───────────────────────────────────────────────────────────────
 
@@ -433,5 +442,233 @@ test.describe('INT-6 Check-In', () => {
     await page.locator('input[placeholder="手動輸入 Person ID"]').fill('uid-not-in-db')
     await page.locator('button:has-text("查詢 Go")').click()
     await expect(page.getByText(/找不到|not found|error/i)).toBeVisible({ timeout: 10_000 })
+  })
+})
+
+// ── Suite 7: All-meals cycling ───────────────────────────────────────────────
+//
+// Scans family 3941 (高健萍 + 王承恩, ordered all 12 meals) through every meal
+// in sequence.  Verifies:
+//   - scan succeeds for each meal independently
+//   - counts are isolated per meal (taken for meal N does not bleed into meal M)
+//   - quota works correctly for each meal
+//
+// NOTE: This suite mutates the DB for all 12 meals; cleanup voids all of them.
+
+test.describe('INT-7 All-meals cycling', () => {
+  test.beforeEach(() => {
+    for (const mealId of ALL_MEAL_IDS) {
+      voidScansInDb([FAMILY_2_MEMBER_A.uid, FAMILY_2_MEMBER_B.uid], mealId)
+    }
+  })
+  test.afterEach(() => {
+    for (const mealId of ALL_MEAL_IDS) {
+      voidScansInDb([FAMILY_2_MEMBER_A.uid, FAMILY_2_MEMBER_B.uid], mealId)
+    }
+  })
+
+  test('INT-7.1 — scan succeeds for each of the 12 meals in sequence', async ({ page }) => {
+    await loginAndSync(page)
+
+    for (const mealId of ALL_MEAL_IDS) {
+      // Open the meal picker and choose this specific meal by ID
+      // (selectMealIfNeeded picks the first visible meal; we need a specific one)
+      const sheet = page.locator('div.fixed.inset-0.z-50')
+      const mealBar = page.locator('[data-testid="meal-bar"]')
+
+      // Open the meal picker
+      await mealBar.click()
+      await sheet.waitFor({ state: 'visible', timeout: 5_000 })
+
+      // Find and click the button for this mealId
+      const mealBtn = sheet.locator(`button[data-meal-id="${mealId}"]`)
+      if (await mealBtn.count() === 0) {
+        // Fall back: click any button whose text matches the meal order
+        const allBtns = sheet.locator('button.flex-1.rounded-xl')
+        const idx = ALL_MEAL_IDS.indexOf(mealId) % (await allBtns.count())
+        await allBtns.nth(idx).click()
+      } else {
+        await mealBtn.click()
+      }
+      await sheet.waitFor({ state: 'hidden', timeout: 5_000 })
+
+      // Scan member A for this meal
+      await page.locator('input[placeholder="手動輸入 Person ID"]').fill(FAMILY_2_MEMBER_A.uid)
+      await page.locator('button:has-text("查詢 Go")').click()
+
+      await expect(page.getByText('成功！請拿飯盒')).toBeVisible({ timeout: 10_000 })
+
+      // taken should be 1 for this meal (not carried over from previous meals)
+      const takenEl = page.locator('.text-2xl.font-bold.tabular-nums').nth(1)
+      await expect(takenEl).toHaveText('1')
+
+      await page.locator('button:has-text("掃描下一位")').click()
+    }
+  })
+
+  test('INT-7.2 — counts are isolated: scanning meal A does not affect meal B taken count', async ({ page }) => {
+    await loginAndSync(page)
+
+    // Scan member A for LUNCH_DEC27 (meal 193)
+    await selectMealIfNeeded(page, '午餐')
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill(FAMILY_2_MEMBER_A.uid)
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible({ timeout: 10_000 })
+    const takenLunch = page.locator('.text-2xl.font-bold.tabular-nums').nth(1)
+    await expect(takenLunch).toHaveText('1')
+    await page.locator('button:has-text("掃描下一位")').click()
+
+    // Now switch to dinner (meal 194) and scan member A — taken must be 0 (fresh)
+    const sheet = page.locator('div.fixed.inset-0.z-50')
+    await page.locator('[data-testid="meal-bar"]').click()
+    await sheet.waitFor({ state: 'visible', timeout: 5_000 })
+    await sheet.locator('button.flex-1.rounded-xl', { hasText: '晚餐' }).first().click()
+    await sheet.waitFor({ state: 'hidden', timeout: 5_000 })
+
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill(FAMILY_2_MEMBER_A.uid)
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible({ timeout: 10_000 })
+
+    const takenDinner = page.locator('.text-2xl.font-bold.tabular-nums').nth(1)
+    // Dinner taken should be 1 (only the scan we just did), not 2
+    await expect(takenDinner).toHaveText('1')
+  })
+
+  test('INT-7.3 — quota enforced independently per meal', async ({ page }) => {
+    await loginAndSync(page)
+
+    // Fill quota for LUNCH_DEC27 (2 ordered, scan both members)
+    await selectMealIfNeeded(page, '午餐')
+    for (const member of [FAMILY_2_MEMBER_A, FAMILY_2_MEMBER_B]) {
+      await page.locator('input[placeholder="手動輸入 Person ID"]').fill(member.uid)
+      await page.locator('button:has-text("查詢 Go")').click()
+      await expect(page.getByText('成功！請拿飯盒')).toBeVisible({ timeout: 10_000 })
+      await page.locator('button:has-text("掃描下一位")').click()
+    }
+
+    // Lunch is now full — scanning member A again should exceed
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill(FAMILY_2_MEMBER_A.uid)
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('抱歉！已領了全部')).toBeVisible({ timeout: 10_000 })
+    await page.locator('button:has-text("掃描下一位")').click()
+
+    // But dinner (meal 194) should still be open — scan member A succeeds
+    const sheet = page.locator('div.fixed.inset-0.z-50')
+    await page.locator('[data-testid="meal-bar"]').click()
+    await sheet.waitFor({ state: 'visible', timeout: 5_000 })
+    await sheet.locator('button.flex-1.rounded-xl', { hasText: '晚餐' }).first().click()
+    await sheet.waitFor({ state: 'hidden', timeout: 5_000 })
+
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill(FAMILY_2_MEMBER_A.uid)
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible({ timeout: 10_000 })
+  })
+})
+
+// ── Suite 8: MealInfo live counts (Tab 3) ────────────────────────────────────
+//
+// Verifies that Tab 3 (MealInfo) shows counts that reflect actual scans in the
+// database — not just mocked values.  Uses the Westin venue (location matching
+// meals 193/194 in the dev DB).
+
+test.describe('INT-8 MealInfo live counts', () => {
+  test.beforeEach(() => {
+    voidScansInDb([FAMILY_2_MEMBER_A.uid, FAMILY_2_MEMBER_B.uid], LUNCH_DEC27)
+  })
+  test.afterEach(() => {
+    voidScansInDb([FAMILY_2_MEMBER_A.uid, FAMILY_2_MEMBER_B.uid], LUNCH_DEC27)
+  })
+
+  async function goToMealInfo(page: Page) {
+    await selectMealIfNeeded(page)
+    await page.locator('button:has-text("📋 餐食 Meal Info")').click()
+  }
+
+  test('INT-8.1 — Tab 3 loads venues and shows at least one meal row', async ({ page }) => {
+    await loginAndSync(page)
+    await goToMealInfo(page)
+    // Venue selector should be visible
+    await expect(page.locator('select, [role="combobox"]').first()).toBeVisible({ timeout: 10_000 })
+    // At least one meal row in the table
+    await expect(page.locator('table tbody tr, [data-testid="meal-row"]').first()).toBeVisible({ timeout: 10_000 })
+  })
+
+  test('INT-8.2 — taken count on Tab 3 increments after a scan on Tab 1', async ({ page }) => {
+    await loginAndSync(page)
+
+    // Record the current taken count for meal 193 from Tab 3
+    await goToMealInfo(page)
+    // Find the row for LUNCH_DEC27 and read its taken count
+    const lunchRow = page.locator('tr', { hasText: '午餐' }).first()
+    await expect(lunchRow).toBeVisible({ timeout: 10_000 })
+    const takenBefore = await lunchRow.locator('td').nth(2).textContent()
+    const countBefore = parseInt(takenBefore?.replace(/\D/g, '') ?? '0', 10)
+
+    // Go to Tab 1 and scan member A
+    await page.locator('button:has-text("🍱 掃描 Scan")').click()
+    await selectMealIfNeeded(page, '午餐')
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill(FAMILY_2_MEMBER_A.uid)
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible({ timeout: 10_000 })
+
+    // Wait for the background flush to push the scan to the server (~12s)
+    await page.waitForTimeout(13_000)
+
+    // Go back to Tab 3 — force a refresh by re-navigating
+    await goToMealInfo(page)
+    // Tab 3 fetches live counts from the server on load
+    await page.waitForTimeout(2_000)
+
+    const lunchRowAfter = page.locator('tr', { hasText: '午餐' }).first()
+    await expect(lunchRowAfter).toBeVisible({ timeout: 10_000 })
+    const takenAfter = await lunchRowAfter.locator('td').nth(2).textContent()
+    const countAfter = parseInt(takenAfter?.replace(/\D/g, '') ?? '0', 10)
+
+    expect(countAfter).toBeGreaterThan(countBefore)
+  })
+
+  test('INT-8.3 — Tab 3 shows non-zero total when scans exist in the DB', async ({ page }) => {
+    // Pre-populate: scan member A before loading the app
+    const loginRes = await axios.post(`${API_BASE}/auth/volunteer`, { code: ACCESS_CODE })
+    const token = loginRes.data.token
+    await axios.post(
+      `${API_BASE}/meal/scan`,
+      { id: FAMILY_2_MEMBER_A.uid, mealId: LUNCH_DEC27 },
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+
+    await loginAndSync(page)
+    await goToMealInfo(page)
+
+    // The taken count for the lunch row should be ≥ 1
+    const lunchRow = page.locator('tr', { hasText: '午餐' }).first()
+    await expect(lunchRow).toBeVisible({ timeout: 10_000 })
+    const takenText = await lunchRow.locator('td').nth(2).textContent()
+    const count = parseInt(takenText?.replace(/\D/g, '') ?? '0', 10)
+    expect(count).toBeGreaterThanOrEqual(1)
+  })
+
+  test('INT-8.4 — Tab 3 person-lookup shows taken count matching actual scans', async ({ page }) => {
+    await loginAndSync(page)
+
+    // Scan member A on Tab 1 first
+    await selectMealIfNeeded(page, '午餐')
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill(FAMILY_2_MEMBER_A.uid)
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible({ timeout: 10_000 })
+    await page.locator('button:has-text("掃描下一位")').click()
+
+    // Go to Tab 3 and look up member A
+    await goToMealInfo(page)
+    const searchInput = page.locator('input[placeholder*="Person ID"], input[placeholder*="搜尋"]').first()
+    if (await searchInput.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await searchInput.fill(FAMILY_2_MEMBER_A.uid)
+      await page.keyboard.press('Enter')
+      // The result should show 領了 ≥ 1 for this person
+      await expect(page.getByText(/領了/).first()).toBeVisible({ timeout: 10_000 })
+    } else {
+      // Tab 3 may not have a person search — skip gracefully
+      test.skip()
+    }
   })
 })

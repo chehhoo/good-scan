@@ -13,15 +13,19 @@ test.describe('StatusDot', () => {
     await page.goto('/')
     await expect(page.getByText('在線 Online')).toBeVisible({ timeout: 15_000 })
 
-    // Abort sync calls on reload so warmUpCache fails and stale state persists.
-    // Without this, mocked sync completes in <5s and races the stale assertion.
+    // Abort only the sync endpoints on reload so warmUpCache fails and cannot
+    // update lastCacheSyncAt. Keep event-info alive so the app stays logged in
+    // and online=true — aborting it clears the token and shows LoginPage (blank).
     await page.route('**/api/scan/sync/**', route => route.abort())
+    // Write a stale timestamp AFTER setting the route so the reload reads it
     await page.evaluate(() => {
       const stale = new Date(Date.now() - 31 * 60 * 1000).toISOString()
       localStorage.setItem('lastCacheSyncAt', stale)
     })
     await page.reload()
-    await expect(page.getByText('緩存過期 · 點擊同步')).toBeVisible({ timeout: 5_000 })
+    // Allow time for warmUpCache to attempt and fail before asserting stale
+    await page.waitForTimeout(1_500)
+    await expect(page.getByText('緩存過期 · 點擊同步')).toBeVisible({ timeout: 8_000 })
   })
 
   test('tapping stale dot triggers re-sync and turns green', async ({ page }) => {
@@ -29,14 +33,15 @@ test.describe('StatusDot', () => {
     await page.goto('/')
     await expect(page.getByText('在線 Online')).toBeVisible({ timeout: 15_000 })
 
-    // Abort sync on reload so stale state is reliably visible before clicking
+    // Same approach: abort sync routes, keep event-info alive
     await page.route('**/api/scan/sync/**', route => route.abort())
     await page.evaluate(() => {
       const stale = new Date(Date.now() - 31 * 60 * 1000).toISOString()
       localStorage.setItem('lastCacheSyncAt', stale)
     })
     await page.reload()
-    await expect(page.getByText('緩存過期 · 點擊同步')).toBeVisible({ timeout: 5_000 })
+    await page.waitForTimeout(1_500)
+    await expect(page.getByText('緩存過期 · 點擊同步')).toBeVisible({ timeout: 8_000 })
 
     // Re-register sync mocks (LIFO — takes priority over abort handler) so re-sync succeeds
     await mockSyncEndpoints(page)
