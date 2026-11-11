@@ -105,7 +105,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
         setResult({
           name, uid, mealId, mealLabel, mealOrdered: 0, mealTaken: taken, mealRemaining: 0,
           status: 'error', errorMessage: '沒有訂餐記錄 No meal order',
-          trackers: [], mealPlans: await buildMealPlans(registerMeals, personMeals, takenCounts, pickupsByMeal),
+          trackers: [], mealPlans: buildMealPlans(registerMeals, personMeals, takenCounts, pickupsByMeal),
         })
         setLoading(false)
         return
@@ -113,47 +113,20 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
 
       const isExceeded = taken >= ordered
       const newTaken = isExceeded ? taken : taken + 1
+      const scannedAt = new Date().toISOString()
 
-      let localQueueId: number | undefined
-      let localClientScanId: string | undefined
-      if (!isExceeded) {
-        const queued = await queueScan(uid, mealId)
-        localQueueId = queued.id
-        localClientScanId = queued.clientScanId
-      }
-
-      if (navigator.onLine && !isExceeded) {
-        // Mark this exact local row synced on success so the periodic cache
-        // warm-up (which re-downloads confirmed server scans) doesn't insert a
-        // second copy of the same pickup — leaving the original row forever
-        // "synced: false" caused every online scan to be double-counted once
-        // the warm-up cycle ran, inflating household pickup history and quota.
-        scanApi.scan(uid, mealId, localClientScanId)
-          .then(() => { if (localQueueId != null) markSynced(localQueueId) })
-          .catch((err) => {
-            const status = err?.response?.status
-            const msg: string = err?.response?.data?.message ?? err?.response?.data ?? ''
-            if (status === 409) {
-              // Server says quota exceeded — permanently refuse this row
-              if (localQueueId != null) markRefused(localQueueId, '已超過訂餐數量 Over the family\'s order')
-            } else if (status === 404 || status === 422) {
-              if (localQueueId != null) markRefused(localQueueId, msg || `HTTP ${status}`)
-            }
-            // 429 or network error: leave pending — flush will retry
-          })
-      }
-
-      // Household-wide pickup list for this meal, including the scan just queued above.
+      // Household-wide pickup list for this meal, including the scan being queued now.
       const existingPickups = pickupsByMeal[mealId] ?? []
       const trackers: PickupRecord[] = isExceeded
         ? existingPickups.map((p) => ({ name: p.name, scannedAt: p.scannedAt }))
-        : [...existingPickups, { name, scannedAt: new Date().toISOString() }].map((p) => ({ name: p.name, scannedAt: p.scannedAt }))
+        : [...existingPickups, { name, scannedAt }].map((p) => ({ name: p.name, scannedAt: p.scannedAt }))
 
       const updatedTakenCounts = { ...takenCounts, [mealId]: newTaken }
       const updatedPickupsByMeal = isExceeded
         ? pickupsByMeal
-        : { ...pickupsByMeal, [mealId]: [...existingPickups, { uid, name, scannedAt: new Date().toISOString() }] }
+        : { ...pickupsByMeal, [mealId]: [...existingPickups, { uid, name, scannedAt }] }
 
+      // Show result immediately — don't block on the IndexedDB write or network.
       if (isExceeded) playExceeded(); else playSuccess()
       setResult({
         name, uid, mealId, mealLabel,
@@ -162,8 +135,33 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
         mealRemaining: Math.max(0, ordered - newTaken),
         status: isExceeded ? 'exceeded' : 'ok',
         trackers,
-        mealPlans: await buildMealPlans(registerMeals, personMeals, updatedTakenCounts, updatedPickupsByMeal),
+        mealPlans: buildMealPlans(registerMeals, personMeals, updatedTakenCounts, updatedPickupsByMeal),
       })
+
+      // Write + API fire happen in the background after the result is already visible.
+      if (!isExceeded) {
+        queueScan(uid, mealId).then(({ id: localQueueId, clientScanId }) => {
+          if (navigator.onLine) {
+            // Mark this exact local row synced on success so the periodic cache
+            // warm-up (which re-downloads confirmed server scans) doesn't insert a
+            // second copy of the same pickup — leaving the original row forever
+            // "synced: false" caused every online scan to be double-counted once
+            // the warm-up cycle ran, inflating household pickup history and quota.
+            scanApi.scan(uid, mealId, clientScanId)
+              .then(() => markSynced(localQueueId))
+              .catch((err) => {
+                const status = err?.response?.status
+                const msg: string = err?.response?.data?.message ?? err?.response?.data ?? ''
+                if (status === 409) {
+                  markRefused(localQueueId, '已超過訂餐數量 Over the family\'s order')
+                } else if (status === 404 || status === 422) {
+                  markRefused(localQueueId, msg || `HTTP ${status}`)
+                }
+                // 429 or network error: leave pending — flush will retry
+              })
+          }
+        })
+      }
     } catch (e) {
       playError()
       setResult({
@@ -667,12 +665,12 @@ function MealPillBar({
   )
 }
 
-async function buildMealPlans(
+function buildMealPlans(
   registerMeals: import('../db/localDb').CachedRegisterMeal[],
   personMeals: CachedMeal[],
   takenCounts: Record<number, number>,
   pickupsByMeal: Record<number, { uid: string; name: string; scannedAt: string }[]>,
-): Promise<MealPlanRow[]> {
+): MealPlanRow[] {
   const rows: MealPlanRow[] = []
   for (const rm of registerMeals) {
     const meal = personMeals.find((m) => m.id === rm.mealId)
