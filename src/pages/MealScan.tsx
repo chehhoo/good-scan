@@ -221,6 +221,14 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
     return meals.find((m) => m.id === id)
   }, [meals, selectedMealId])
 
+  // When in scan mode and no meal is auto-detected or manually selected,
+  // open the picker so the volunteer must choose one explicitly.
+  useEffect(() => {
+    if (scanning && !pickerOpen && meals.length > 0 && !activeMeal) {
+      setPickerOpen(true)
+    }
+  }, [scanning, pickerOpen, meals.length, activeMeal])
+
   const statusConfig = result ? {
     ok:       { bg: 'bg-green-900',  border: 'border-green-700',  icon: '✓', iconBg: 'bg-green-500',   text: 'text-green-300',   zh: '成功！請拿飯盒',   en: 'MEAL SERVED' },
     exceeded: { bg: 'bg-amber-950',  border: 'border-amber-700',  icon: '⚠', iconBg: 'bg-amber-500',   text: 'text-amber-300',   zh: '抱歉！已領了全部', en: 'QUOTA EXCEEDED' },
@@ -544,21 +552,12 @@ function MealPillBar({
   onOpenChange: (open: boolean) => void
 }) {
   const changeOpen = onOpenChange
-  const hasAutoOpened = useRef(false)
 
   const autoDetected = useMemo(() => detectCurrentMeal(meals), [meals])
 
   const effectiveId = selectedMealId ?? autoDetected
   const isAuto = selectedMealId === undefined
   const activeMeal = meals.find((m) => m.id === effectiveId)
-
-  // Auto-open the picker when the tab is focused and no meal can be detected
-  useEffect(() => {
-    if (!hasAutoOpened.current && meals.length > 0 && effectiveId === undefined) {
-      hasAutoOpened.current = true
-      changeOpen(true)
-    }
-  }, [meals.length, effectiveId])
 
   if (meals.length === 0) return null
 
