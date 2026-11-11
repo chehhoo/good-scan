@@ -80,6 +80,7 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
+    allowedHosts: true,    
     proxy: {
       '/api': {
         target: GOOD_API_URL,

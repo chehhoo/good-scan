@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { db, lookupByUid, type CachedMeal, type CachedRegisterMeal } from '../db/localDb'
+import { prettyTime } from '../utils/time'
 
 interface MealStat {
   meal: CachedMeal
@@ -318,14 +319,3 @@ function mealTypeLabel(type: number) {
   return type === 1 ? '早餐 Breakfast' : type === 2 ? '午餐 Lunch' : '晚餐 Dinner'
 }
 
-function prettyTime(iso: string): string {
-  const d = new Date(iso)
-  const diffMin = Math.floor((Date.now() - d.getTime()) / 60000)
-  if (diffMin < 1)  return '剛剛 just now'
-  if (diffMin < 60) return `${diffMin} 分鐘前`
-  const hhmm = d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })
-  const today = new Date().toDateString() === d.toDateString()
-  if (today) return `今天 ${hhmm}`
-  const md = d.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })
-  return `${md} ${hhmm}`
-}

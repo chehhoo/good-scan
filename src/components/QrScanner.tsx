@@ -10,6 +10,8 @@ export default function QrScanner({ onScan, active }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const readerRef = useRef<BrowserMultiFormatReader | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const onScanRef = useRef(onScan)
+  useEffect(() => { onScanRef.current = onScan }, [onScan])
 
   useEffect(() => {
     if (!active) {
@@ -17,21 +19,30 @@ export default function QrScanner({ onScan, active }: Props) {
       return
     }
 
+    // isCurrent guards against:
+    // 1. React StrictMode double-mount (cleanup sets it false before remount)
+    // 2. Stray ZXing callbacks fired after reader.reset() during unmount
+    // 3. Duplicate fires of the same QR code while the parent processes the first one
+    let isCurrent = true
     const reader = new BrowserMultiFormatReader()
     readerRef.current = reader
 
     reader.decodeFromVideoDevice(null, videoRef.current!, (result, err) => {
+      if (!isCurrent) return
       if (result) {
-        onScan(result.getText())
+        isCurrent = false   // fire exactly once per mount cycle
+        reader.reset()      // stop the loop immediately; parent will unmount us
+        onScanRef.current(result.getText())
       } else if (err && !(err instanceof NotFoundException) && !(err instanceof ChecksumException) && !(err instanceof FormatException)) {
         setError('Camera error: ' + err.message)
       }
     }).catch((e) => setError('Camera access denied: ' + e.message))
 
     return () => {
+      isCurrent = false
       reader.reset()
     }
-  }, [active, onScan])
+  }, [active])
 
   if (error) {
     return (
