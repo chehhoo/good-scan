@@ -46,7 +46,7 @@ export default defineConfig({
     // Run with: E2E_ACCESS_CODE=GOSPEL2026 npx playwright test --project=integration
     ...(process.env.CI ? [] : [{
       name: 'integration',
-      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5173' },
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5174' },
       testMatch: '**/integration.spec.ts',
     }]),
   ],
