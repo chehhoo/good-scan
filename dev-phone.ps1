@@ -9,21 +9,22 @@ $GoodApiDir = Join-Path $ScriptDir "..\good-api"
 
 # ── 1. Start Vite in background ───────────────────────────────────────────────
 Write-Host "Starting Vite dev server..." -ForegroundColor Cyan
-$ViteProc = Start-Process -FilePath "npm" -ArgumentList "run", "dev", "--", "--host" -WorkingDirectory $ScriptDir -PassThru -NoNewWindow
+$ViteProc = Start-Process -FilePath "npm.cmd" -ArgumentList "run", "dev", "--", "--host" -WorkingDirectory $ScriptDir -PassThru -NoNewWindow
 
 Start-Sleep -Seconds 3
 
 # ── 2. Start Cloudflare tunnel, capture URL ───────────────────────────────────
 Write-Host "Starting Cloudflare tunnel..." -ForegroundColor Cyan
 $TunnelLog = Join-Path $env:TEMP "cloudflared-tunnel.log"
-$TunnelProc = Start-Process -FilePath "npx" -ArgumentList "cloudflared", "tunnel", "--url", "http://localhost:5173" -PassThru -NoNewWindow -RedirectStandardOutput $TunnelLog -RedirectStandardError $TunnelLog
+$TunnelErrLog = Join-Path $env:TEMP "cloudflared-tunnel-err.log"
+$TunnelProc = Start-Process -FilePath "npx.cmd" -ArgumentList "cloudflared", "tunnel", "--url", "http://localhost:5173" -PassThru -NoNewWindow -RedirectStandardOutput $TunnelLog -RedirectStandardError $TunnelErrLog
 
 Write-Host "Waiting for tunnel URL..."
 $TunnelUrl = ""
 for ($i = 0; $i -lt 30; $i++) {
     Start-Sleep -Seconds 1
-    if (Test-Path $TunnelLog) {
-        $content = Get-Content $TunnelLog -Raw -ErrorAction SilentlyContinue
+    if (Test-Path $TunnelErrLog) {
+        $content = Get-Content $TunnelErrLog -Raw -ErrorAction SilentlyContinue
         if ($content -match 'https://[a-z0-9-]+\.trycloudflare\.com') {
             $TunnelUrl = $Matches[0]
             break
@@ -33,7 +34,7 @@ for ($i = 0; $i -lt 30; $i++) {
 
 if (-not $TunnelUrl) {
     Write-Host "ERROR: Could not get tunnel URL." -ForegroundColor Red
-    if (Test-Path $TunnelLog) { Get-Content $TunnelLog }
+    if (Test-Path $TunnelErrLog) { Get-Content $TunnelErrLog }
     Stop-Process -Id $ViteProc.Id -Force -ErrorAction SilentlyContinue
     Stop-Process -Id $TunnelProc.Id -Force -ErrorAction SilentlyContinue
     exit 1
@@ -64,4 +65,5 @@ try {
     Stop-Process -Id $ViteProc.Id -Force -ErrorAction SilentlyContinue
     Stop-Process -Id $TunnelProc.Id -Force -ErrorAction SilentlyContinue
     Remove-Item $TunnelLog -ErrorAction SilentlyContinue
+    Remove-Item $TunnelErrLog -ErrorAction SilentlyContinue
 }
