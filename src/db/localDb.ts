@@ -42,6 +42,7 @@ export interface ScanQueueItem {
   clientScanId: string  // UUID — dedup key sent to server with every copy of this scan
   refused?: string      // set to rejection reason when server permanently refuses this scan
   syncError?: string    // last error if sync failed
+  undoPending?: boolean // true while the 10-second undo window is open — excluded from flush
 }
 
 // ── Database ───────────────────────────────────────────────────────────────
@@ -123,8 +124,14 @@ export async function queueScan(uid: string, mealId: number): Promise<{ id: numb
     scannedAt: new Date().toISOString(),
     synced: false,
     clientScanId,
+    undoPending: true,
   })
   return { id: id as number, clientScanId }
+}
+
+// Called when the undo window closes without the volunteer undoing the scan.
+export async function confirmScan(id: number) {
+  return db.scanQueue.update(id, { undoPending: false })
 }
 
 export async function markSynced(id: number) {
@@ -136,7 +143,15 @@ export async function markRefused(id: number, reason: string) {
 }
 
 export async function getPendingScans(): Promise<ScanQueueItem[]> {
-  return db.scanQueue.filter((s) => s.synced === false && !s.refused).toArray()
+  // Grace: skip undoPending records scanned within the last 15 seconds so the
+  // volunteer's 10-second undo window is never cut short by the background flush.
+  // If the app closes mid-window, the scan is > 15s old on next open and gets sent.
+  const graceCutoff = new Date(Date.now() - 15_000).toISOString()
+  return db.scanQueue.filter((s) =>
+    s.synced === false &&
+    !s.refused &&
+    (!s.undoPending || s.scannedAt < graceCutoff)
+  ).toArray()
 }
 
 export async function getRefusedScans(): Promise<ScanQueueItem[]> {
@@ -144,6 +159,10 @@ export async function getRefusedScans(): Promise<ScanQueueItem[]> {
 }
 
 export async function dismissRefusedScan(id: number) {
+  return db.scanQueue.delete(id)
+}
+
+export async function deleteScan(id: number) {
   return db.scanQueue.delete(id)
 }
 
