@@ -128,9 +128,15 @@ test.describe('Offline operation', () => {
     await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
 
     await context.setOffline(false)
-    // Wait for two flush attempts — row should stay pending each time
-    await expect.poll(() => flushCount >= 2, { timeout: 25_000, intervals: [1000] }).toBe(true)
+    // The 10-second undo window delays the first flush-eligible moment, so we need
+    // extra time: raise the per-test limit to cover worst-case confirmScan + 2 flush intervals.
+    test.setTimeout(55_000)
+    // Wait for first flush (up to 25s after online: 10s undo window + up to 10s flush interval)
+    await expect.poll(() => flushCount >= 1, { timeout: 25_000, intervals: [1000] }).toBe(true)
+    // Transient rejection must NOT mark the row refused
     await expect(page.getByText('1 筆未被接受')).not.toBeVisible()
+    // Row is still pending — verify it gets retried (second flush within next 15s)
+    await expect.poll(() => flushCount >= 2, { timeout: 15_000, intervals: [1000] }).toBe(true)
   })
 
   test('4.4 — voided scan removed from local queue on next sync', async ({ page }) => {

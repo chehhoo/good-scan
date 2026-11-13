@@ -42,6 +42,7 @@ export interface ScanQueueItem {
   clientScanId: string  // UUID — dedup key sent to server with every copy of this scan
   refused?: string      // set to rejection reason when server permanently refuses this scan
   syncError?: string    // last error if sync failed
+  undoPending?: boolean // true while the 10-second undo window is open — excluded from flush
 }
 
 // ── Database ───────────────────────────────────────────────────────────────
@@ -69,7 +70,6 @@ export const db = new GoodScanDb()
 
 export async function lookupByUid(uid: string) {
   let profile = await db.profiles.where('uid').equals(uid).first()
-  // Fallback: uid may be a numeric person ID entered manually
   if (!profile) {
     const numId = Number(uid)
     if (Number.isInteger(numId) && numId > 0) {
@@ -93,10 +93,15 @@ export async function lookupByUid(uid: string) {
   const nameByUid = new Map(householdProfiles.map((p) => [p.uid, p.cnName || `${p.firstName} ${p.lastName}`]))
   const householdUids = householdProfiles.map((p) => p.uid)
 
+  // Include the raw scanned uid as a fallback: if a numeric ID was entered and a
+  // prior scan was stored with that raw string (before this fix), it would not be
+  // in householdUids (which contains the profile's canonical uid).
+  const uidsToQuery = [...new Set([...householdUids, uid])]
+
   // Fetch meals and all household scan records in parallel (one scan query instead of N)
   const [meals, allScanEntries] = await Promise.all([
     db.meals.where('id').anyOf(mealIds).toArray(),
-    db.scanQueue.where('uid').anyOf(householdUids).toArray(),
+    db.scanQueue.where('uid').anyOf(uidsToQuery).toArray(),
   ])
 
   const validEntries = allScanEntries.filter((e) => !e.refused)
@@ -123,8 +128,15 @@ export async function queueScan(uid: string, mealId: number): Promise<{ id: numb
     scannedAt: new Date().toISOString(),
     synced: false,
     clientScanId,
+    undoPending: true,
   })
+  console.log(`[queueScan] Added entry with id=${id}, uid=${uid}, mealId=${mealId}, undoPending=true`)
   return { id: id as number, clientScanId }
+}
+
+// Called when the undo window closes without the volunteer undoing the scan.
+export async function confirmScan(id: number) {
+  return db.scanQueue.update(id, { undoPending: false })
 }
 
 export async function markSynced(id: number) {
@@ -135,8 +147,23 @@ export async function markRefused(id: number, reason: string) {
   return db.scanQueue.update(id, { refused: reason })
 }
 
+// Count ALL unsynced records for display (includes undoPending undo-window items).
+// Use this for the StatusDot pending badge — the user's scan IS pending even during undo.
+// Use getPendingScans() for flush — that one excludes the undo window.
+export async function getPendingCount(): Promise<number> {
+  return db.scanQueue.filter((s) => s.synced === false && !s.refused).count()
+}
+
 export async function getPendingScans(): Promise<ScanQueueItem[]> {
-  return db.scanQueue.filter((s) => s.synced === false && !s.refused).toArray()
+  // Grace: skip undoPending records scanned within the last 15 seconds so the
+  // volunteer's 10-second undo window is never cut short by the background flush.
+  // If the app closes mid-window, the scan is > 15s old on next open and gets sent.
+  const graceCutoff = new Date(Date.now() - 15_000).toISOString()
+  return db.scanQueue.filter((s) =>
+    s.synced === false &&
+    !s.refused &&
+    (!s.undoPending || s.scannedAt < graceCutoff)
+  ).toArray()
 }
 
 export async function getRefusedScans(): Promise<ScanQueueItem[]> {
@@ -144,6 +171,10 @@ export async function getRefusedScans(): Promise<ScanQueueItem[]> {
 }
 
 export async function dismissRefusedScan(id: number) {
+  return db.scanQueue.delete(id)
+}
+
+export async function deleteScan(id: number) {
   return db.scanQueue.delete(id)
 }
 
