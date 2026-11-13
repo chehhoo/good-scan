@@ -67,6 +67,7 @@ test.describe('MealScan', () => {
     await page.locator('button:has-text("查詢 Go")').click()
 
     await expect(page.getByText('地點')).toBeVisible()
-    await expect(page.getByText('Westin')).toBeVisible()
+    // Scope to the table — MealPillBar also shows a Westin badge now
+    await expect(page.getByRole('table').getByText('Westin')).toBeVisible()
   })
 })

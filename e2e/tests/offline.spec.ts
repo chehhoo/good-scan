@@ -128,8 +128,10 @@ test.describe('Offline operation', () => {
     await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
 
     await context.setOffline(false)
-    // Wait for two flush attempts — row should stay pending each time
-    await expect.poll(() => flushCount >= 2, { timeout: 25_000, intervals: [1000] }).toBe(true)
+    // Wait for two flush attempts — row should stay pending each time.
+    // Allow 35s: the 10s undo window delays the first eligible flush, so worst case
+    // is confirmScan at t=10 racing with the flush interval, giving t=20 + t=30 for 2 flushes.
+    await expect.poll(() => flushCount >= 2, { timeout: 35_000, intervals: [1000] }).toBe(true)
     await expect(page.getByText('1 筆未被接受')).not.toBeVisible()
   })
 
