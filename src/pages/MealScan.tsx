@@ -53,7 +53,9 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const [listening, setListening] = useState(false)
   const [undoCountdown, setUndoCountdown] = useState<number | null>(null)
+  const [mealPlansExpanded, setMealPlansExpanded] = useState(false)
   const undoInfoRef = useRef<{ localId: number; clientScanId: string } | null>(null)
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Tick the undo countdown down every second; confirm the scan when it expires
   useEffect(() => {
@@ -63,9 +65,11 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
       if (info) confirmScan(info.localId)
       setUndoCountdown(null)
       undoInfoRef.current = null
+      undoTimerRef.current = null
       return
     }
     const t = setTimeout(() => setUndoCountdown((c) => (c !== null && c > 0 ? c - 1 : null)), 1000)
+    undoTimerRef.current = t
     return () => clearTimeout(t)
   }, [undoCountdown])
 
@@ -154,11 +158,12 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
       })
 
       // Queue the scan locally; the background flush sends it after the undo window closes.
+      // Use profile.uid (not the raw scanned uid) so numeric-ID lookups store the
+      // canonical uid — otherwise the next lookupByUid won't find this entry.
       if (!isExceeded) {
-        queueScan(uid, mealId).then(({ id: localQueueId, clientScanId }) => {
-          undoInfoRef.current = { localId: localQueueId, clientScanId }
-          setUndoCountdown(10)
-        })
+        const { id: localQueueId, clientScanId } = await queueScan(profile.uid, mealId)
+        undoInfoRef.current = { localId: localQueueId, clientScanId }
+        setUndoCountdown(10)
       }
     } catch (e) {
       playError()
@@ -204,12 +209,21 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
     handleScan(uid)
   }, [manualUid, handleScan])
 
-  const reset = () => {
+  const reset = async () => {
+    // Cancel any pending undo timer
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current)
+      undoTimerRef.current = null
+    }
+
     // Volunteer moved on without undoing — confirm the scan so the flush picks it up
     if (undoInfoRef.current) {
-      confirmScan(undoInfoRef.current.localId)
+      console.log(`[MealScan] Confirming scan: localId=${undoInfoRef.current.localId}`)
+      await confirmScan(undoInfoRef.current.localId)
+      console.log(`[MealScan] Scan confirmed, undoPending is now false`)
       undoInfoRef.current = null
     }
+    
     loadingRef.current = false
     setResult(null)
     setScanning(true)
@@ -219,13 +233,23 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
   }
 
   const handleUndo = async () => {
+    // Cancel the timer immediately
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current)
+      undoTimerRef.current = null
+    }
+
     const info = undoInfoRef.current
     if (info) {
       await deleteScan(info.localId)
       undoInfoRef.current = null
     }
     setUndoCountdown(null)
-    reset()
+    await reset()
+  }
+
+  const handleScanNext = async () => {
+    await reset()
   }
 
   const activeMeal = useMemo(() => {
@@ -264,7 +288,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
       <MealPillBar
         meals={meals}
         selectedMealId={selectedMealId}
-        onSelect={(id) => { setSelectedMealId(id); if (result) reset() }}
+        onSelect={(id) => { setSelectedMealId(id); if (result) void reset() }}
         open={pickerOpen}
         onOpenChange={setPickerOpen}
       />
@@ -313,10 +337,10 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
 
       {/* ── Scan result ─────────────────────────────────────────────── */}
       {result && !loading && statusConfig && (
-        <div className="flex flex-col flex-1 min-h-0">
+        <div className="flex flex-col flex-1 min-h-0 relative">
 
-          {/* Scrollable result content */}
-          <div className="flex-1 overflow-y-auto">
+          {/* Scrollable result content — with bottom padding for fixed buttons */}
+          <div className="flex-1 overflow-y-auto pb-24">
 
           {/* Status stripe */}
           <div className={`flex items-center gap-3 px-4 py-3 ${statusConfig.bg} border-b ${statusConfig.border}`}>
@@ -389,58 +413,72 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
             </div>
           )}
 
-          {/* Meal plans table — the 地點 column only when this event's meals have venues */}
-          {result.mealPlans.length > 0 && (() => { const showLocation = result.mealPlans.some(r => r.meal.location); return (
-            <div className="overflow-x-auto border-b border-blue-800">
-              <table className="w-full text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                <thead>
-                  <tr className="bg-blue-950 text-blue-400 text-xs uppercase tracking-widest">
-                    {showLocation && <th className="px-3 py-2 text-left font-semibold">地點</th>}
-                    <th className="px-3 py-2 text-left font-semibold">餐食</th>
-                    <th className="px-3 py-2 text-center font-semibold">訂</th>
-                    <th className="px-3 py-2 text-center font-semibold">領</th>
-                    <th className="px-3 py-2 text-left font-semibold">記錄</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-blue-900">
-                  {result.mealPlans.map((row) => (
-                    <tr
-                      key={row.meal.id}
-                      className={row.meal.id === result.mealId ? 'bg-blue-900/50' : 'bg-blue-950/30'}
-                    >
-                      {showLocation && (
-                        <td className="px-3 py-2.5 align-middle">
-                          <LocationBadge locationId={row.meal.location} />
-                        </td>
-                      )}
-                      <td className="px-3 py-2.5 align-middle">
-                        <div className="font-semibold text-sm">{mealTypeLabel(row.meal.type)}</div>
-                        <div className="text-blue-400 text-xs mt-0.5">{row.meal.date.slice(5)} · {row.meal.startTime.slice(0, 5)}</div>
-                      </td>
-                      <td className="px-3 py-2.5 text-center align-middle">{row.ordered}</td>
-                      <td className={`px-3 py-2.5 text-center align-middle font-semibold ${row.taken >= row.ordered ? 'text-blue-600' : 'text-green-400'}`}>
-                        {row.taken}
-                      </td>
-                      <td className="px-3 py-2.5 align-middle">
-                        {row.pickupRecords.map((pr, i) => (
-                          <div key={i} className="text-xs text-blue-400 flex gap-1 items-center">
-                            <span className="opacity-50">·</span>
-                            <span>{pr.name}</span>
-                            <span className="text-blue-600">{prettyTime(pr.scannedAt)}</span>
-                          </div>
-                        ))}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* Meal plans accordion — collapsed by default */}
+          {result.mealPlans.length > 0 && (
+            <div className="border-b border-blue-800">
+              <button
+                onClick={() => setMealPlansExpanded(!mealPlansExpanded)}
+                className="w-full px-4 py-3 flex items-center justify-between hover:bg-blue-900/30 active:bg-blue-900/50 transition-colors"
+              >
+                <span className="text-xs text-blue-400 uppercase tracking-widest font-semibold">
+                  {result.mealPlans.length} 餐食 Meal Plans
+                </span>
+                <span className={`text-lg transition-transform ${mealPlansExpanded ? 'rotate-180' : ''}`}>▼</span>
+              </button>
+
+              {mealPlansExpanded && (() => { const showLocation = result.mealPlans.some(r => r.meal.location); return (
+                <div className="overflow-x-auto bg-blue-950/40">
+                  <table className="w-full text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    <thead>
+                      <tr className="bg-blue-950 text-blue-400 text-xs uppercase tracking-widest">
+                        {showLocation && <th className="px-3 py-2 text-left font-semibold">地點</th>}
+                        <th className="px-3 py-2 text-left font-semibold">餐食</th>
+                        <th className="px-3 py-2 text-center font-semibold">訂</th>
+                        <th className="px-3 py-2 text-center font-semibold">領</th>
+                        <th className="px-3 py-2 text-left font-semibold">記錄</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-blue-900">
+                      {result.mealPlans.map((row) => (
+                        <tr
+                          key={row.meal.id}
+                          className={row.meal.id === result.mealId ? 'bg-blue-900/50' : 'bg-blue-950/30'}
+                        >
+                          {showLocation && (
+                            <td className="px-3 py-2.5 align-middle">
+                              <LocationBadge locationId={row.meal.location} />
+                            </td>
+                          )}
+                          <td className="px-3 py-2.5 align-middle">
+                            <div className="font-semibold text-sm">{mealTypeLabel(row.meal.type)}</div>
+                            <div className="text-blue-400 text-xs mt-0.5">{row.meal.date.slice(5)} · {row.meal.startTime.slice(0, 5)}</div>
+                          </td>
+                          <td className="px-3 py-2.5 text-center align-middle">{row.ordered}</td>
+                          <td className={`px-3 py-2.5 text-center align-middle font-semibold ${row.taken >= row.ordered ? 'text-blue-600' : 'text-green-400'}`}>
+                            {row.taken}
+                          </td>
+                          <td className="px-3 py-2.5 align-middle">
+                            {row.pickupRecords.map((pr, i) => (
+                              <div key={i} className="text-xs text-blue-400 flex gap-1 items-center">
+                                <span className="opacity-50">·</span>
+                                <span>{pr.name}</span>
+                                <span className="text-blue-600">{prettyTime(pr.scannedAt)}</span>
+                              </div>
+                            ))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) })()}
             </div>
-          ) })()}
+          )}
 
           </div>{/* end scrollable content */}
 
-          {/* Sticky action row — always visible at the bottom */}
-          <div className="px-4 py-4 flex gap-3 bg-blue-950 border-t border-blue-800">
+          {/* Fixed action row — always visible at the bottom of screen */}
+          <div className="fixed bottom-0 left-0 right-0 px-4 py-4 flex gap-3 bg-blue-950 border-t border-blue-800 z-20">
             {result.status === 'ok' && undoCountdown !== null && undoCountdown > 0 && (
               <button
                 onClick={handleUndo}
@@ -457,7 +495,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
               </button>
             )}
             <button
-              onClick={reset}
+              onClick={handleScanNext}
               className="flex-1 py-4 bg-blue-800 hover:bg-blue-700 active:bg-blue-900 rounded-xl text-base font-bold tracking-wide transition-colors flex items-center justify-center gap-2"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
