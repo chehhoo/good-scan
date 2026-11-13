@@ -274,32 +274,6 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
         <div className="flex-1 flex flex-col">
           <QrScanner onScan={handleScan} active={scanning && !pickerOpen} />
 
-          {/* Active meal context — tappable shortcut to open meal picker */}
-          <button
-            onClick={() => setPickerOpen(true)}
-            className="bg-blue-950 border-b border-blue-800 px-4 py-3 flex items-center gap-3 w-full text-left active:bg-blue-900 transition-colors"
-          >
-            {activeMeal ? (
-              <>
-                <div className="flex-1 min-w-0">
-                  <div className="text-white font-bold text-lg leading-tight">
-                    {mealTypeShort(activeMeal.type)}
-                    <span className="ml-2 text-sm font-normal text-blue-300">
-                      {activeMeal.type === 1 ? 'Breakfast' : activeMeal.type === 2 ? 'Lunch' : 'Dinner'}
-                    </span>
-                  </div>
-                  <div className="text-blue-300 text-sm mt-0.5">
-                    {formatDate(activeMeal.date)}
-                    <span className="text-blue-500 ml-2">{activeMeal.startTime.slice(0, 5)}–{activeMeal.endTime.slice(0, 5)}</span>
-                  </div>
-                </div>
-                {activeMeal.location ? <LocationBadge locationId={activeMeal.location} /> : null}
-                <span className="text-blue-500 text-xs shrink-0">▾</span>
-              </>
-            ) : (
-              <span className="text-amber-400 font-semibold text-sm">⚠ 請選擇餐次 Choose meal ▾</span>
-            )}
-          </button>
           {manualEntryEnabled && (
             <div className="p-3 border-t border-blue-800 flex gap-2">
               <input
@@ -590,28 +564,30 @@ function MealPillBar({
 
   return (
     <>
-      {/* Compact single-line bar */}
+      {/* Meal selector bar */}
       <button
         data-testid="meal-bar"
         onClick={() => changeOpen(true)}
-        className="w-full flex items-center gap-2 px-4 border-b border-blue-800 bg-blue-950 active:bg-blue-900 transition-colors"
-        style={{ minHeight: 48 }}
+        className={`w-full flex items-center gap-3 px-4 py-3 border-b active:bg-blue-900 transition-colors ${
+          activeMeal ? 'border-blue-800 bg-blue-950' : 'border-amber-600 bg-amber-950'
+        }`}
       >
-        {isAuto && (
-          <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500 text-white leading-none">自動</span>
+        {isAuto && activeMeal && (
+          <span className="shrink-0 text-xs font-bold px-2 py-1 rounded-full bg-blue-500 text-white leading-none">自動</span>
         )}
         {activeMeal ? (
-          <span className="flex-1 text-left text-sm font-semibold text-white">
-            {mealTypeShort(activeMeal.type)}
-            <span className="font-normal text-blue-300 ml-2">
+          <span className="flex-1 text-left">
+            <span className="text-base font-bold text-white">{mealTypeShort(activeMeal.type)}</span>
+            <span className="font-normal text-blue-300 ml-2 text-sm">
               {activeMeal.startTime.slice(0, 5)}–{activeMeal.endTime.slice(0, 5)}
             </span>
-            <span className="font-normal text-blue-400 ml-2 text-xs">{formatDate(activeMeal.date)}</span>
+            <span className="font-normal text-blue-400 ml-2 text-sm">{formatDate(activeMeal.date)}</span>
           </span>
         ) : (
-          <span className="flex-1 text-left text-sm text-blue-400">選擇餐次 Choose meal</span>
+          <span className="flex-1 text-left text-base font-bold text-amber-400">⚠ 請選擇餐次 Choose meal</span>
         )}
-        <span className="shrink-0 text-blue-400 text-xs">▾</span>
+        {activeMeal?.location ? <LocationBadge locationId={activeMeal.location} /> : null}
+        <span className="shrink-0 text-blue-400 text-sm">▾</span>
       </button>
 
       {/* Bottom sheet overlay */}
