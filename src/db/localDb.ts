@@ -151,7 +151,7 @@ export async function markRefused(id: number, reason: string) {
 // Use getPendingScans() for flush — that one excludes the undo window.
 export async function getPendingCount(): Promise<number> {
   // Anchor to the synced index first, then filter refused in JS — avoids full table scan.
-  return db.scanQueue.where('synced').equals(0).filter((s) => !s.refused).count()
+  return db.scanQueue.where('synced').equals(false).filter((s) => !s.refused).count()
 }
 
 export async function getPendingScans(): Promise<ScanQueueItem[]> {
@@ -160,7 +160,7 @@ export async function getPendingScans(): Promise<ScanQueueItem[]> {
   // If the app closes mid-window, the scan is > 15s old on next open and gets sent.
   const graceCutoff = new Date(Date.now() - 15_000).toISOString()
   // Anchor to the synced index first, then filter the rest in JS — avoids full table scan.
-  return db.scanQueue.where('synced').equals(0).filter((s) =>
+  return db.scanQueue.where('synced').equals(false).filter((s) =>
     !s.refused &&
     (!s.undoPending || s.scannedAt < graceCutoff)
   ).toArray()
