@@ -313,7 +313,10 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
 
       {/* ── Scan result ─────────────────────────────────────────────── */}
       {result && !loading && statusConfig && (
-        <div className="flex flex-col gap-0">
+        <div className="flex flex-col flex-1 min-h-0">
+
+          {/* Scrollable result content */}
+          <div className="flex-1 overflow-y-auto">
 
           {/* Status stripe */}
           <div className={`flex items-center gap-3 px-4 py-3 ${statusConfig.bg} border-b ${statusConfig.border}`}>
@@ -434,8 +437,10 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
             </div>
           ) })()}
 
-          {/* Bottom action row: undo (if window open) + scan next */}
-          <div className="px-4 py-4 flex gap-3">
+          </div>{/* end scrollable content */}
+
+          {/* Sticky action row — always visible at the bottom */}
+          <div className="px-4 py-4 flex gap-3 bg-blue-950 border-t border-blue-800">
             {result.status === 'ok' && undoCountdown !== null && undoCountdown > 0 && (
               <button
                 onClick={handleUndo}
