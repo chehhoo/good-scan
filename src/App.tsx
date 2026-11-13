@@ -31,7 +31,7 @@ export default function App() {
   const lastMissRefreshAt = useRef(0)
   // Manual entry: always on in dev; toggle by tapping version badge 5× in prod
   const [manualEntryEnabled, setManualEntryEnabled] = useState<boolean>(
-    localStorage.getItem(MANUAL_ENTRY_KEY) === '1'
+    import.meta.env.DEV || localStorage.getItem(MANUAL_ENTRY_KEY) === '1'
   )
   const versionTapCount = useRef(0)
   const versionTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -255,7 +255,7 @@ export default function App() {
               Good Vessel · 好器皿
               {' '}
               <span
-                className={`font-normal select-none ${manualEntryEnabled ? 'text-yellow-400' : 'text-blue-400'}`}
+                className={`font-normal select-none ${manualEntryEnabled && !import.meta.env.DEV ? 'text-yellow-400' : 'text-blue-400'}`}
                 onClick={handleVersionTap}
               >v{__APP_VERSION__}</span>
             </span>
