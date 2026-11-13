@@ -142,6 +142,13 @@ export async function markRefused(id: number, reason: string) {
   return db.scanQueue.update(id, { refused: reason })
 }
 
+// Count ALL unsynced records for display (includes undoPending undo-window items).
+// Use this for the StatusDot pending badge — the user's scan IS pending even during undo.
+// Use getPendingScans() for flush — that one excludes the undo window.
+export async function getPendingCount(): Promise<number> {
+  return db.scanQueue.filter((s) => s.synced === false && !s.refused).count()
+}
+
 export async function getPendingScans(): Promise<ScanQueueItem[]> {
   // Grace: skip undoPending records scanned within the last 15 seconds so the
   // volunteer's 10-second undo window is never cut short by the background flush.

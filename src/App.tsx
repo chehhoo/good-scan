@@ -5,7 +5,7 @@ import MealInfo from './pages/MealInfo'
 import LoginPage from './pages/LoginPage'
 import StatusDot from './components/StatusDot'
 import UpdatePrompt from './components/UpdatePrompt'
-import { db, markSynced, markRefused, getPendingScans, getRefusedScans, dismissRefusedScan, type ScanQueueItem } from './db/localDb'
+import { db, markSynced, markRefused, getPendingScans, getPendingCount, getRefusedScans, dismissRefusedScan, type ScanQueueItem } from './db/localDb'
 import { syncApi, eventApi, type ActiveEvent } from './api/client'
 
 type Tab = 'meal' | 'checkin' | 'info'
@@ -66,8 +66,8 @@ export default function App() {
 
   // Update pending count and refused list
   const refreshPendingCount = async () => {
-    const pending = await getPendingScans()
-    setPendingCount(pending.length)
+    const count = await getPendingCount()
+    setPendingCount(count)
     const refused = await getRefusedScans()
     setRefusedScans(refused)
   }
