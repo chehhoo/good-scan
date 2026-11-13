@@ -50,8 +50,9 @@ export default function MealInfo({ lastScannedUid, refreshKey, onSync }: Props) 
         orderedByMeal[rm.mealId] = (orderedByMeal[rm.mealId] ?? 0) + (rm.qty ?? 1)
       }
 
-      // Fetch all synced scans in one query, then tally per meal in JS — avoids N+1 queries.
-      const syncedScans = await db.scanQueue.where('synced').equals(true).toArray()
+      // Fetch all scans once, filter synced in JS — avoids N+1 per-meal queries.
+      const allScans = await db.scanQueue.toArray()
+      const syncedScans = allScans.filter((s) => s.synced === true)
       const takenByMeal: Record<number, number> = {}
       for (const s of syncedScans) {
         takenByMeal[s.mealId] = (takenByMeal[s.mealId] ?? 0) + 1
