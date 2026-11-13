@@ -130,7 +130,6 @@ export async function queueScan(uid: string, mealId: number): Promise<{ id: numb
     clientScanId,
     undoPending: true,
   })
-  console.log(`[queueScan] Added entry with id=${id}, uid=${uid}, mealId=${mealId}, undoPending=true`)
   return { id: id as number, clientScanId }
 }
 
@@ -151,7 +150,8 @@ export async function markRefused(id: number, reason: string) {
 // Use this for the StatusDot pending badge — the user's scan IS pending even during undo.
 // Use getPendingScans() for flush — that one excludes the undo window.
 export async function getPendingCount(): Promise<number> {
-  return db.scanQueue.filter((s) => s.synced === false && !s.refused).count()
+  // Anchor to the synced index first, then filter refused in JS — avoids full table scan.
+  return db.scanQueue.where('synced').equals(0).filter((s) => !s.refused).count()
 }
 
 export async function getPendingScans(): Promise<ScanQueueItem[]> {
@@ -159,14 +159,16 @@ export async function getPendingScans(): Promise<ScanQueueItem[]> {
   // volunteer's 10-second undo window is never cut short by the background flush.
   // If the app closes mid-window, the scan is > 15s old on next open and gets sent.
   const graceCutoff = new Date(Date.now() - 15_000).toISOString()
-  return db.scanQueue.filter((s) =>
-    s.synced === false &&
+  // Anchor to the synced index first, then filter the rest in JS — avoids full table scan.
+  return db.scanQueue.where('synced').equals(0).filter((s) =>
     !s.refused &&
     (!s.undoPending || s.scannedAt < graceCutoff)
   ).toArray()
 }
 
 export async function getRefusedScans(): Promise<ScanQueueItem[]> {
+  // refused is not indexed; full scan is acceptable here — called only when the
+  // volunteer taps the refused-scans badge, not on a recurring interval.
   return db.scanQueue.filter((s) => !!s.refused).toArray()
 }
 
@@ -178,9 +180,3 @@ export async function deleteScan(id: number) {
   return db.scanQueue.delete(id)
 }
 
-export async function getLastSyncTime(): Promise<Date | null> {
-  const all = await db.scanQueue.filter((s) => s.synced === true).toArray()
-  if (all.length === 0) return null
-  const latest = all.reduce((a, b) => (a.scannedAt > b.scannedAt ? a : b))
-  return new Date(latest.scannedAt)
-}

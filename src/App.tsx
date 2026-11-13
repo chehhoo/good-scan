@@ -100,10 +100,10 @@ export default function App() {
       }
     }).catch(() => { setOnline(false) })
 
-    // Flush scan queue every 10s
+    // Flush scan queue every 10s — flushQueue calls refreshPendingCount internally
     syncIntervalRef.current = setInterval(() => {
       if (navigator.onLine) flushQueue()
-      refreshPendingCount()
+      else refreshPendingCount()
     }, 10_000)
 
     // Re-sync cache every 5 minutes so data stays fresh
