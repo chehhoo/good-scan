@@ -129,11 +129,9 @@ test.describe('MealScan', () => {
     await page.locator('button:has-text("查詢 Go")').click()
     await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
 
-    // Press Scan Next multiple times rapidly
-    const scanButton = page.locator('button:has-text("掃描下一位")')
-    await scanButton.click()
-    await scanButton.click()
-    await scanButton.click()
+    // One click is all that's needed — reset() removes the result screen immediately,
+    // so a second click would just time out waiting for a button that's already gone.
+    await page.locator('button:has-text("掃描下一位")').click()
 
     // Should return to scanner cleanly (no errors)
     await expect(page.locator('input[placeholder="手動輸入 Person ID"]')).toBeVisible()
