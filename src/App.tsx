@@ -31,7 +31,7 @@ export default function App() {
   const lastMissRefreshAt = useRef(0)
   // Manual entry: always on in dev; toggle by tapping version badge 5× in prod
   const [manualEntryEnabled, setManualEntryEnabled] = useState<boolean>(
-    import.meta.env.DEV || localStorage.getItem(MANUAL_ENTRY_KEY) === '1'
+    localStorage.getItem(MANUAL_ENTRY_KEY) === '1'
   )
   const versionTapCount = useRef(0)
   const versionTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -251,14 +251,16 @@ export default function App() {
         <div className="flex items-center gap-2">
           <img src="/logo.svg" alt="Good Vessel" className="w-8 h-8 rounded-xl shrink-0" />
           <div className="flex flex-col leading-tight">
-            <span className="text-[10px] text-blue-300 font-medium tracking-widest uppercase">Good Vessel · 好器皿</span>
-            <span className="text-sm font-bold tracking-wide">
-              {activeEvent ? `${activeEvent.name}${activeEvent.nameEng ? ` ${activeEvent.nameEng}` : ''}` : 'Scan'}
+            <span className="text-[10px] text-blue-300 font-medium tracking-widest uppercase">
+              Good Vessel · 好器皿
               {' '}
               <span
-              className={`text-[10px] font-normal select-none ${manualEntryEnabled && !import.meta.env.DEV ? 'text-yellow-400' : 'text-blue-400'}`}
-              onClick={handleVersionTap}
-            >v{__APP_VERSION__}</span>
+                className={`font-normal select-none ${manualEntryEnabled ? 'text-yellow-400' : 'text-blue-400'}`}
+                onClick={handleVersionTap}
+              >v{__APP_VERSION__}</span>
+            </span>
+            <span className="text-sm font-bold tracking-wide">
+              {activeEvent ? `${activeEvent.name}${activeEvent.nameEng ? ` ${activeEvent.nameEng}` : ''}` : 'Scan'}
             </span>
           </div>
         </div>
