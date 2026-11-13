@@ -66,8 +66,91 @@ test.describe('MealScan', () => {
     await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U001')
     await page.locator('button:has-text("查詢 Go")').click()
 
+    // Meal plans are behind a collapsible accordion — expand it first
+    await page.locator('button:has-text("餐食 Meal Plans")').click()
     await expect(page.getByText('地點')).toBeVisible()
     // Scope to the table — MealPillBar also shows a Westin badge now
     await expect(page.getByRole('table').getByText('Westin')).toBeVisible()
   })
+
+  test('undo timer ticks down after successful scan', async ({ page }) => {
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U001')
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
+
+    // Undo button should appear with countdown starting at 10
+    const undoButton = page.locator('button:has-text("撤銷 Undo")')
+    await expect(undoButton).toBeVisible()
+    await expect(undoButton).toContainText('10s')
+
+    // Wait a second and check countdown decreased
+    await page.waitForTimeout(1100)
+    await expect(undoButton).toContainText('9s')
+  })
+
+  test('"Scan Next" during undo window cancels timer and commits scan', async ({ page }) => {
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U001')
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
+
+    // Undo button appears
+    const undoButton = page.locator('button:has-text("撤銷 Undo")')
+    await expect(undoButton).toBeVisible()
+    await expect(undoButton).toContainText('10s')
+
+    // Immediately press Scan Next before timer expires
+    await page.locator('button:has-text("掃描下一位")').click()
+
+    // Result disappears, undo button gone, camera returns
+    await expect(page.getByText('成功！請拿飯盒')).not.toBeVisible()
+    await expect(undoButton).not.toBeVisible()
+    await expect(page.locator('input[placeholder="手動輸入 Person ID"]')).toBeVisible()
+  })
+
+  test('undo timer expires naturally and commits scan', async ({ page }) => {
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U001')
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
+
+    const undoButton = page.locator('button:has-text("撤銷 Undo")')
+    await expect(undoButton).toBeVisible()
+
+    // Wait for timer to expire (10 seconds + buffer)
+    await page.waitForTimeout(11_000)
+
+    // Undo button should disappear after timer expires
+    await expect(undoButton).not.toBeVisible()
+    // Result should still be visible (only the undo button leaves)
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
+  })
+
+  test('rapid "Scan Next" presses don\'t cause issues', async ({ page }) => {
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U001')
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
+
+    // Press Scan Next multiple times rapidly
+    const scanButton = page.locator('button:has-text("掃描下一位")')
+    await scanButton.click()
+    await scanButton.click()
+    await scanButton.click()
+
+    // Should return to scanner cleanly (no errors)
+    await expect(page.locator('input[placeholder="手動輸入 Person ID"]')).toBeVisible()
+    await expect(page.getByText('成功！請拿飯盒')).not.toBeVisible()
+  })
+
+  test('tapping undo button cancels the scan', async ({ page }) => {
+    await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U001')
+    await page.locator('button:has-text("查詢 Go")').click()
+    await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
+
+    // Tap the undo button
+    await page.locator('button:has-text("撤銷 Undo")').click()
+
+    // Result disappears, back to scanner
+    await expect(page.getByText('成功！請拿飯盒')).not.toBeVisible()
+    await expect(page.locator('input[placeholder="手動輸入 Person ID"]')).toBeVisible()
+  })
 })
+
