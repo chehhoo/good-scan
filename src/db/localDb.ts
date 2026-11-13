@@ -70,7 +70,6 @@ export const db = new GoodScanDb()
 
 export async function lookupByUid(uid: string) {
   let profile = await db.profiles.where('uid').equals(uid).first()
-  // Fallback: uid may be a numeric person ID entered manually
   if (!profile) {
     const numId = Number(uid)
     if (Number.isInteger(numId) && numId > 0) {
@@ -94,10 +93,15 @@ export async function lookupByUid(uid: string) {
   const nameByUid = new Map(householdProfiles.map((p) => [p.uid, p.cnName || `${p.firstName} ${p.lastName}`]))
   const householdUids = householdProfiles.map((p) => p.uid)
 
+  // Include the raw scanned uid as a fallback: if a numeric ID was entered and a
+  // prior scan was stored with that raw string (before this fix), it would not be
+  // in householdUids (which contains the profile's canonical uid).
+  const uidsToQuery = [...new Set([...householdUids, uid])]
+
   // Fetch meals and all household scan records in parallel (one scan query instead of N)
   const [meals, allScanEntries] = await Promise.all([
     db.meals.where('id').anyOf(mealIds).toArray(),
-    db.scanQueue.where('uid').anyOf(householdUids).toArray(),
+    db.scanQueue.where('uid').anyOf(uidsToQuery).toArray(),
   ])
 
   const validEntries = allScanEntries.filter((e) => !e.refused)
@@ -126,6 +130,7 @@ export async function queueScan(uid: string, mealId: number): Promise<{ id: numb
     clientScanId,
     undoPending: true,
   })
+  console.log(`[queueScan] Added entry with id=${id}, uid=${uid}, mealId=${mealId}, undoPending=true`)
   return { id: id as number, clientScanId }
 }
 
