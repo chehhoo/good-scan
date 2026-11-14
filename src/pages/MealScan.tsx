@@ -218,9 +218,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
 
     // Volunteer moved on without undoing — confirm the scan so the flush picks it up
     if (undoInfoRef.current) {
-      console.log(`[MealScan] Confirming scan: localId=${undoInfoRef.current.localId}`)
       await confirmScan(undoInfoRef.current.localId)
-      console.log(`[MealScan] Scan confirmed, undoPending is now false`)
       undoInfoRef.current = null
     }
     
@@ -339,8 +337,8 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
       {result && !loading && statusConfig && (
         <div className="flex flex-col flex-1 min-h-0 relative">
 
-          {/* Scrollable result content — with bottom padding for fixed buttons */}
-          <div className="flex-1 overflow-y-auto pb-24">
+          {/* Scrollable result content */}
+          <div className="flex-1 overflow-y-auto">
 
           {/* Status stripe */}
           <div className={`flex items-center gap-3 px-4 py-3 ${statusConfig.bg} border-b ${statusConfig.border}`}>
@@ -478,7 +476,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
           </div>{/* end scrollable content */}
 
           {/* Fixed action row — always visible at the bottom of screen */}
-          <div className="fixed bottom-0 left-0 right-0 px-4 py-4 flex gap-3 bg-blue-950 border-t border-blue-800 z-20">
+          <div className="px-4 py-4 flex gap-3 bg-blue-950 border-t border-blue-800 shrink-0">
             {result.status === 'ok' && undoCountdown !== null && undoCountdown > 0 && (
               <button
                 onClick={handleUndo}
