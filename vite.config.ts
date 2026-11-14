@@ -9,6 +9,10 @@ const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'))
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
+    // Inject GOOD_API_URL as a build-time constant so Workbox urlPattern
+    // closures serialized into the service worker can reference it without
+    // a ReferenceError at runtime.
+    GOOD_API_URL: JSON.stringify(GOOD_API_URL),
   },
   plugins: [
     react(),
