@@ -229,7 +229,7 @@ export default function App() {
           .filter((r) => !isTransientRejection(r.reason))
           .map((r) => {
             const row = pending.find((s) => String(s.id) === String(r.localId))
-            return row?.id != null ? markRefused(row.id, r.reason) : Promise.resolve()
+            return row?.id != null ? markRefused(row.id, formatRefusedReason(r.reason)) : Promise.resolve()
           }),
       ])
       setLastSyncAt(new Date())
