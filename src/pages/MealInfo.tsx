@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
-import { db, lookupByUid, type CachedMeal, type CachedRegisterMeal } from '../db/localDb'
-import { prettyTime } from '../utils/time'
+import { db, type CachedMeal } from '../db/localDb'
 
 interface MealStat {
   meal: CachedMeal
@@ -8,18 +7,7 @@ interface MealStat {
   taken: number
 }
 
-interface PersonResult {
-  name: string
-  uid: string
-  registerMeals: CachedRegisterMeal[]
-  meals: CachedMeal[]
-  takenCounts: Record<number, number>
-  pickupRecords: Record<number, { name: string; scannedAt: string }[]>
-  lastScanAt: string | null
-}
-
 interface Props {
-  lastScannedUid: string | null
   refreshKey: number
   onSync: () => Promise<void>
 }
@@ -29,15 +17,11 @@ const VENUE_LABELS: Record<number, { label: string; bg: string; text: string }> 
   2: { label: 'Hilton',  bg: '#d2b48c', text: '#3a2000' },
 }
 
-export default function MealInfo({ lastScannedUid, refreshKey, onSync }: Props) {
+export default function MealInfo({ refreshKey, onSync }: Props) {
   const [mealStats, setMealStats] = useState<MealStat[]>([])
   const [statsLoading, setStatsLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
-
-  const [personResult, setPersonResult] = useState<PersonResult | null>(null)
-  const [personLoading, setPersonLoading] = useState(false)
-  const [personError, setPersonError] = useState<string | null>(null)
 
   const loadStats = async () => {
     setStatsLoading(true)
@@ -83,45 +67,9 @@ export default function MealInfo({ lastScannedUid, refreshKey, onSync }: Props) 
     }
   }
 
-  const loadPerson = async (uid: string) => {
-    setPersonLoading(true)
-    setPersonError(null)
-    setPersonResult(null)
-    try {
-      const local = await lookupByUid(uid)
-      if (!local) {
-        setPersonError('沒有找到此人 Person not found')
-        return
-      }
-      const { profile, registerMeals, meals: personMeals, takenCounts, pickupsByMeal } = local
-      const name = profile.cnName || `${profile.firstName} ${profile.lastName}`
-      // Household-wide records (meal entitlement/quota is shared across the household —
-      // see lookupByUid), so this shows who in the family already picked up, not just uid.
-      const pickupRecords: Record<number, { name: string; scannedAt: string }[]> = {}
-      let lastScanAt: string | null = null
-      for (const rm of registerMeals) {
-        const entries = pickupsByMeal[rm.mealId] ?? []
-        pickupRecords[rm.mealId] = entries.map((e) => ({ name: e.name, scannedAt: e.scannedAt }))
-        for (const e of entries) {
-          if (!lastScanAt || e.scannedAt > lastScanAt) lastScanAt = e.scannedAt
-        }
-      }
-      setPersonResult({ name, uid, registerMeals, meals: personMeals, takenCounts, pickupRecords, lastScanAt })
-    } catch {
-      setPersonError('查詢失敗 Lookup failed')
-    } finally {
-      setPersonLoading(false)
-    }
-  }
-
   useEffect(() => {
     loadStats()
   }, [refreshKey])
-
-  useEffect(() => {
-    if (lastScannedUid) loadPerson(lastScannedUid)
-    else { setPersonResult(null); setPersonError(null) }
-  }, [lastScannedUid, refreshKey])
 
   return (
     <div className="p-4 flex flex-col gap-4">
@@ -225,85 +173,6 @@ export default function MealInfo({ lastScannedUid, refreshKey, onSync }: Props) 
         </div>
       )}
 
-      {/* Last scanned person */}
-      <div className="border-t border-blue-800 pt-4 flex flex-col gap-3">
-        <p className="text-sm font-semibold text-blue-300">上次掃描 Last Scanned</p>
-
-        {!lastScannedUid && (
-          <p className="text-center text-blue-500 text-sm py-4">尚未掃描 No scan yet</p>
-        )}
-        {personLoading && (
-          <p className="text-center text-blue-300 animate-pulse text-sm">查詢中 Loading…</p>
-        )}
-        {personError && (
-          <p className="text-center text-red-400 text-sm">{personError}</p>
-        )}
-        {personResult && (
-          <div className="bg-blue-900 rounded-xl overflow-hidden">
-            <div className="px-4 py-3 bg-blue-800 flex items-center justify-between">
-              <div>
-                <span className="font-bold text-lg">{personResult.name}</span>
-                <span className="ml-2 text-xs text-blue-400 font-normal">#{personResult.uid}</span>
-              </div>
-              {personResult.lastScanAt && (
-                <span className="text-xs text-green-400 shrink-0 ml-2">
-                  {prettyTime(personResult.lastScanAt)}
-                </span>
-              )}
-            </div>
-            <table className="w-full text-sm">
-              <thead className="bg-blue-800/60 text-blue-300 text-xs uppercase tracking-wide">
-                <tr>
-                  <th className="px-3 py-2 text-left">餐食 Meal</th>
-                  <th className="px-3 py-2 text-center">訂了</th>
-                  <th className="px-3 py-2 text-center">領了</th>
-                  <th className="px-3 py-2 text-left">記錄</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-blue-800">
-                {[...personResult.registerMeals]
-                  .sort((a, b) => {
-                    const ma = personResult.meals.find((m) => m.id === a.mealId)
-                    const mb = personResult.meals.find((m) => m.id === b.mealId)
-                    return (ma?.date ?? '').localeCompare(mb?.date ?? '') || (ma?.type ?? 0) - (mb?.type ?? 0)
-                  })
-                  .map((rm) => {
-                  const meal = personResult.meals.find((m) => m.id === rm.mealId)
-                  if (!meal) return null
-                  const taken = personResult.takenCounts[rm.mealId] ?? 0
-                  const records = personResult.pickupRecords[rm.mealId] ?? []
-                  return (
-                    <tr key={rm.id} className="bg-blue-900/40">
-                      <td className="px-3 py-2">
-                        <div className="font-semibold">{mealTypeLabel(meal.type)}</div>
-                        <div className="text-blue-400 text-xs">{meal.date} {meal.startTime.slice(0, 5)}</div>
-                      </td>
-                      <td className="px-3 py-2 text-center">{rm.qty} 盒</td>
-                      <td className="px-3 py-2 text-center">
-                        <span className={taken >= rm.qty ? 'text-gray-500' : 'text-green-400'}>
-                          {taken} 盒
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-xs text-gray-400">
-                        {records.length === 0 ? '—' : records.map((r, i) => (
-                          <div key={i}>{r.name} · {prettyTime(r.scannedAt)}</div>
-                        ))}
-                      </td>
-                    </tr>
-                  )
-                })}
-                {personResult.registerMeals.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-3 py-4 text-center text-blue-400">
-                      無訂餐記錄 No meal orders
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
     </div>
   )
 }
