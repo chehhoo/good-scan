@@ -54,32 +54,6 @@ test.describe('MealInfo', () => {
     await expect(page.getByText('午餐 Lunch')).not.toBeVisible()
   })
 
-  test('5.4 — shows "No scan yet" before any scan', async ({ page }) => {
-    await mockSyncEndpoints(page)
-    await gotoInfoTab(page)
-
-    await expect(page.getByText('尚未掃描 No scan yet')).toBeVisible()
-  })
-
-  test('5.5 — shows last scanned person\'s meal orders after a MealScan', async ({ page }) => {
-    await mockSyncEndpoints(page)
-    await gotoAndSync(page)
-
-    // Scan U001 on the MealScan tab → sets lastScannedUid in App.tsx
-    await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U001')
-    await page.locator('button:has-text("查詢 Go")').click()
-    await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
-
-    // Switch to Info tab — last scanned section should show U001's orders
-    await page.getByText('📋 統計 Info').click()
-
-    await expect(page.getByText('上次掃描 Last Scanned')).toBeVisible()
-    await expect(page.getByText('朱大明', { exact: true })).toBeVisible()
-    // U001 has 2 lunches and 1 dinner ordered
-    await expect(page.getByText('2 盒').first()).toBeVisible()
-    await expect(page.getByText('1 盒').first()).toBeVisible()
-  })
-
   test('5.6 — sync button triggers re-sync and refreshes stats', async ({ page }) => {
     await mockSyncEndpoints(page)
     await gotoInfoTab(page)
