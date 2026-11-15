@@ -2,15 +2,17 @@ import { useState, useEffect, useRef } from 'react'
 import MealScan from './pages/MealScan'
 import CheckIn from './pages/CheckIn'
 import MealInfo from './pages/MealInfo'
+import ScanHistory from './pages/ScanHistory'
 import LoginPage from './pages/LoginPage'
 import StatusDot from './components/StatusDot'
 import UpdatePrompt from './components/UpdatePrompt'
 import { db, markSynced, markRefused, getPendingScans, getPendingCount, getRefusedScans, dismissRefusedScan, type ScanQueueItem } from './db/localDb'
 import { syncApi, eventApi, type ActiveEvent } from './api/client'
 
-type Tab = 'meal' | 'checkin' | 'info'
+type Tab = 'meal' | 'checkin' | 'info' | 'history'
 
 const MANUAL_ENTRY_KEY = 'manualEntryEnabled'
+const HIGH_CONTRAST_KEY = 'highContrast'
 
 export default function App() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'))
@@ -22,6 +24,7 @@ export default function App() {
   const [infoRefreshKey, setInfoRefreshKey] = useState(0)
   const [refusedScans, setRefusedScans] = useState<ScanQueueItem[]>([])
   const [showRefused, setShowRefused] = useState(false)
+  const [isScanning, setIsScanning] = useState(false)
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const cacheIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -34,6 +37,13 @@ export default function App() {
   )
   const versionTapCount = useRef(0)
   const versionTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [highContrast, setHighContrast] = useState<boolean>(
+    localStorage.getItem(HIGH_CONTRAST_KEY) === '1'
+  )
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', highContrast ? 'high-contrast' : 'dark')
+  }, [highContrast])
 
   // Track online/offline status — re-sync cache immediately on reconnect
   useEffect(() => {
@@ -244,19 +254,29 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen max-h-screen overflow-hidden bg-blue-950 text-white">
-      <UpdatePrompt />
+      <UpdatePrompt isScanning={isScanning} />
       {/* Header with status dot */}
       <header className="flex items-center justify-between px-4 py-2 bg-blue-950 border-b border-blue-800 shrink-0">
         <div className="flex items-center gap-2">
           <img src="/logo.svg" alt="Good Vessel" className="w-8 h-8 rounded-xl shrink-0" />
           <div className="flex flex-col leading-tight">
-            <span className="text-[10px] text-blue-300 font-medium tracking-widest uppercase">
+            <span className="text-[10px] text-blue-300 font-medium tracking-widest uppercase flex items-center gap-1">
               Good Vessel · 好器皿
               {' '}
               <span
                 className={`font-normal select-none ${manualEntryEnabled && !import.meta.env.DEV ? 'text-yellow-400' : 'text-blue-400'}`}
                 onClick={handleVersionTap}
               >v{__APP_VERSION__}</span>
+              <button
+                onClick={() => setHighContrast((prev) => {
+                  const next = !prev
+                  if (next) localStorage.setItem(HIGH_CONTRAST_KEY, '1')
+                  else localStorage.removeItem(HIGH_CONTRAST_KEY)
+                  return next
+                })}
+                className="ml-1 text-blue-400 hover:text-blue-200 select-none leading-none"
+                title="Toggle high-contrast mode"
+              >{highContrast ? '☀️' : '🌙'}</button>
             </span>
             <span className="text-sm font-bold tracking-wide">
               {activeEvent ? `${activeEvent.name}${activeEvent.nameEng ? ` ${activeEvent.nameEng}` : ''}` : 'Scan'}
@@ -310,28 +330,30 @@ export default function App() {
 
       {/* Top tab bar */}
       <nav className="flex bg-blue-900 border-b border-blue-700 shrink-0">
-        {(['meal', 'checkin', 'info'] as Tab[]).map((t) => (
+        {(['meal', 'checkin', 'info', 'history'] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => { setTab(t); if (t === 'info') setInfoRefreshKey((k) => k + 1) }}
-            className={`flex-1 py-3 text-sm font-semibold tracking-wide transition-colors ${
+            className={`flex-1 py-3 text-xs font-semibold tracking-wide transition-colors ${
               tab === t
                 ? 'text-white border-b-2 border-white'
                 : 'text-blue-300 hover:text-blue-100'
             }`}
           >
-            {t === 'meal' && '🍽 餐食 Meal'}
-            {t === 'checkin' && '✓ 報到 Check-In'}
-            {t === 'info' && '📋 統計 Info'}
+            {t === 'meal' && '🍽 餐食'}
+            {t === 'checkin' && '✓ 報到'}
+            {t === 'info' && '📋 統計'}
+            {t === 'history' && '📜 記錄'}
           </button>
         ))}
       </nav>
 
       {/* Page content */}
       <main className="flex-1 overflow-y-auto">
-        {tab === 'meal' && <MealScan manualEntryEnabled={manualEntryEnabled} isSynced={lastSyncAt !== null && Date.now() - lastSyncAt.getTime() <= 30 * 60 * 1000} onCacheMiss={refreshOnCacheMiss} />}
-        {tab === 'checkin' && <CheckIn manualEntryEnabled={manualEntryEnabled} isSynced={lastSyncAt !== null && Date.now() - lastSyncAt.getTime() <= 30 * 60 * 1000} onCacheMiss={refreshOnCacheMiss} />}
+        {tab === 'meal' && <MealScan manualEntryEnabled={manualEntryEnabled} isSynced={lastSyncAt !== null && Date.now() - lastSyncAt.getTime() <= 30 * 60 * 1000} onCacheMiss={refreshOnCacheMiss} onResultChange={setIsScanning} />}
+        {tab === 'checkin' && <CheckIn manualEntryEnabled={manualEntryEnabled} isSynced={lastSyncAt !== null && Date.now() - lastSyncAt.getTime() <= 30 * 60 * 1000} onCacheMiss={refreshOnCacheMiss} onResultChange={setIsScanning} />}
         {tab === 'info' && <MealInfo refreshKey={infoRefreshKey} onSync={warmUpCache} />}
+        {tab === 'history' && <ScanHistory />}
       </main>
     </div>
   )

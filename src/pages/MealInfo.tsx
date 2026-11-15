@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { db, type CachedMeal } from '../db/localDb'
+import { db, type CachedMeal, lookupByUid } from '../db/localDb'
 
 interface MealStat {
   meal: CachedMeal
@@ -17,11 +17,16 @@ const VENUE_LABELS: Record<number, { label: string; bg: string; text: string }> 
   2: { label: 'Hilton',  bg: '#d2b48c', text: '#3a2000' },
 }
 
+type LookupResult = Awaited<ReturnType<typeof lookupByUid>>
+
 export default function MealInfo({ refreshKey, onSync }: Props) {
   const [mealStats, setMealStats] = useState<MealStat[]>([])
   const [statsLoading, setStatsLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResult, setSearchResult] = useState<LookupResult | 'not-found' | null>(null)
+  const [searchLoading, setSearchLoading] = useState(false)
 
   const loadStats = async () => {
     setStatsLoading(true)
@@ -67,6 +72,18 @@ export default function MealInfo({ refreshKey, onSync }: Props) {
     }
   }
 
+  const handleSearch = async (query: string) => {
+    const q = query.trim()
+    if (!q) { setSearchResult(null); return }
+    setSearchLoading(true)
+    try {
+      const result = await lookupByUid(q)
+      setSearchResult(result ?? 'not-found')
+    } finally {
+      setSearchLoading(false)
+    }
+  }
+
   useEffect(() => {
     loadStats()
   }, [refreshKey])
@@ -91,6 +108,78 @@ export default function MealInfo({ refreshKey, onSync }: Props) {
           <p className="text-xs text-blue-400">更新於 {lastRefresh.toLocaleTimeString('zh-TW')}</p>
         </div>
       )}
+
+      {/* Person lookup */}
+      <div className="flex flex-col gap-2">
+        <p className="text-sm font-semibold text-blue-300">查詢會員 Person Lookup</p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch(searchQuery)}
+            placeholder="輸入 UID 或 ID…"
+            className="flex-1 bg-blue-900 border border-blue-700 rounded-xl px-3 py-2 text-sm placeholder:text-blue-500 focus:outline-none focus:border-blue-400"
+          />
+          <button
+            onClick={() => handleSearch(searchQuery)}
+            disabled={searchLoading}
+            className="bg-blue-700 hover:bg-blue-600 active:bg-blue-800 rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50"
+          >
+            {searchLoading ? '…' : '查'}
+          </button>
+          {searchResult && (
+            <button
+              onClick={() => { setSearchResult(null); setSearchQuery('') }}
+              className="text-blue-400 px-2 text-sm"
+            >✕</button>
+          )}
+        </div>
+
+        {searchResult === 'not-found' && (
+          <p className="text-sm text-red-400">找不到此人 Not found</p>
+        )}
+
+        {searchResult && searchResult !== 'not-found' && (() => {
+          const { profile, meals, registerMeals, takenCounts } = searchResult
+          const name = profile.cnName || `${profile.firstName} ${profile.lastName}`
+          const rmByMeal = new Map(registerMeals.map((r) => [r.mealId, r.qty ?? 1]))
+          return (
+            <div className="bg-blue-900 rounded-xl p-4 flex flex-col gap-3">
+              <p className="font-semibold text-white">{name}</p>
+              {meals.length === 0 ? (
+                <p className="text-sm text-blue-400">無餐食訂單 No meal orders</p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {meals.map((meal) => {
+                    const ordered = rmByMeal.get(meal.id) ?? 0
+                    const taken = takenCounts[meal.id] ?? 0
+                    const remaining = ordered - taken
+                    const isFull = remaining <= 0
+                    const venue = VENUE_LABELS[meal.location]
+                    return (
+                      <div key={meal.id} className="flex items-center justify-between bg-blue-950 rounded-lg px-3 py-2">
+                        <div>
+                          <p className="text-sm font-medium">{mealTypeLabel(meal.type)}</p>
+                          <p className="text-xs text-blue-400">{meal.date} {meal.startTime?.slice(0,5)}</p>
+                          {venue && (
+                            <span className="inline-block text-xs px-1.5 py-0.5 rounded mt-0.5" style={{ background: venue.bg, color: venue.text }}>{venue.label}</span>
+                          )}
+                        </div>
+                        <div className="text-right ml-4">
+                          <p className={`text-lg font-bold ${isFull ? 'text-yellow-400' : 'text-green-400'}`}>{taken}<span className="text-blue-500 text-sm">/{ordered}</span></p>
+                          <p className="text-xs text-blue-400">領了/訂了</p>
+                          {isFull && <p className="text-xs font-semibold text-yellow-400">滿 FULL</p>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })()}
+      </div>
 
       {statsLoading ? (
         <div className="flex items-center justify-center h-32 text-blue-300 animate-pulse text-sm">
