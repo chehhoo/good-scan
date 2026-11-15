@@ -7,9 +7,7 @@
  */
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
-import Dexie from 'dexie'
-import { lookupByUid, queueScan, markSynced } from './localDb'
-import { db } from './localDb'
+import { lookupByUid, queueScan, markSynced, db } from './localDb'
 
 // Re-open the DB fresh for every test
 beforeEach(async () => {

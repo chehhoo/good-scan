@@ -6,6 +6,7 @@
  */
 import { test, expect } from '@playwright/test'
 import { mockSyncEndpoints, gotoAndSync } from '../fixtures/mock-api'
+import { TODAY } from '../fixtures/test-data'
 
 async function gotoHistoryTab(page: Parameters<typeof gotoAndSync>[0]) {
   await gotoAndSync(page)
@@ -19,7 +20,7 @@ test.describe('ScanHistory', () => {
     await expect(page.getByText('暫無記錄 No records')).toBeVisible()
   })
 
-  test('8.2 — shows attendee name and meal label after a scan', async ({ page }) => {
+  test('8.2 — shows attendee name and meal date after a scan', async ({ page }) => {
     await mockSyncEndpoints(page)
     await gotoAndSync(page)
 
@@ -33,18 +34,18 @@ test.describe('ScanHistory', () => {
     await page.getByText('📜 記錄').click()
     await expect(page.getByText('掃描記錄 Scan History')).toBeVisible()
     await expect(page.getByText('朱大明')).toBeVisible()
-    await expect(page.getByText(/午餐 Lunch/)).toBeVisible()
+    // Meal label is "午餐 <date>" — verify 午餐 and today's date both appear in the same row
+    await expect(page.getByText(new RegExp(`午餐 ${TODAY}`))).toBeVisible()
   })
 
   test('8.3 — pending filter shows only unsynced scans', async ({ page, context }) => {
-    await mockSyncEndpoints(page)
-    // Seed one pre-synced scan via the scans endpoint
+    // Seed a synced server scan for U002, then add an offline pending scan for U001
     await mockSyncEndpoints(page, {
       scans: [{ uid: 'U002', mealId: 1, scannedAt: new Date().toISOString(), clientScanId: 'server-scan-1' }],
     })
     await gotoAndSync(page)
 
-    // Add an offline (pending) scan
+    // Add an offline (pending) scan for U001
     await context.setOffline(true)
     await page.locator('input[placeholder="手動輸入 Person ID"]').fill('U001')
     await page.locator('button:has-text("查詢 Go")').click()
@@ -53,11 +54,11 @@ test.describe('ScanHistory', () => {
 
     await page.getByText('📜 記錄').click()
     // Switch to pending filter
-    await page.getByText('待同步').click()
-    // Only the pending scan (U001) should appear; the synced server scan should not
+    await page.locator('button:has-text("待同步")').click()
+    // The pending U001 scan should appear
     await expect(page.getByText('朱大明')).toBeVisible()
-    // 待同步 status label appears next to the pending row
-    await expect(page.getByText('待同步').first()).toBeVisible()
+    // The synced U002 scan should NOT appear
+    await expect(page.getByText('李小紅')).not.toBeVisible()
   })
 
   test('8.4 — synced filter shows only synced scans', async ({ page }) => {
@@ -66,9 +67,11 @@ test.describe('ScanHistory', () => {
     })
     await gotoHistoryTab(page)
 
-    await page.getByText('已同步').click()
+    await page.locator('button:has-text("已同步")').click()
+    // The synced U002 scan (李小紅) should be visible
     await expect(page.getByText('李小紅')).toBeVisible()
-    await expect(page.getByText('已同步').nth(1)).toBeVisible() // status label on the row
+    // U001 has no scans — should not appear
+    await expect(page.getByText('朱大明')).not.toBeVisible()
   })
 
   test('8.5 — refused filter shows only refused scans', async ({ page, context }) => {
@@ -85,13 +88,14 @@ test.describe('ScanHistory', () => {
     await page.locator('button:has-text("查詢 Go")').click()
     await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
     await context.setOffline(false)
+    // Wait for the refused badge to confirm server refused it
     await expect(page.getByText('1 筆未被接受')).toBeVisible({ timeout: 20_000 })
 
     await page.getByText('📜 記錄').click()
-    await page.getByText('被拒').click()
+    await page.locator('button:has-text("被拒")').click()
     await expect(page.getByText('朱大明')).toBeVisible()
     // Refused reason shown in the row
-    await expect(page.getByText(/已超過此家庭訂餐數量|Quota exceeded/)).toBeVisible()
+    await expect(page.getByText(/已超過此家庭訂餐數量/)).toBeVisible()
   })
 
   test('8.6 — refresh button reloads the list', async ({ page }) => {
