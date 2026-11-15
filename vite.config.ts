@@ -9,10 +9,6 @@ const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'))
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
-    // Inject GOOD_API_URL as a build-time constant so Workbox urlPattern
-    // closures serialized into the service worker can reference it without
-    // a ReferenceError at runtime.
-    GOOD_API_URL: JSON.stringify(GOOD_API_URL),
   },
   plugins: [
     react(),
@@ -27,16 +23,16 @@ export default defineConfig({
             // GET /api/ requests — NetworkFirst with 5s timeout and 7-day cache.
             // Excludes auth, OTP, and per-person endpoints so stale personal
             // data is never served after logout or a user switch.
+            // NOTE: urlPattern functions are serialized by Workbox into sw.js as
+            // strings — closure variables from vite.config.ts are NOT available at
+            // SW runtime. Match on pathname only; never reference config-scope vars.
             urlPattern: ({ url, request }) => {
               if (request.method !== 'GET') return false
-              const apiOrigin = new URL(GOOD_API_URL).origin
-              if (url.origin !== apiOrigin && !url.pathname.startsWith('/api/')) return false
+              if (!url.pathname.startsWith('/api/')) return false
               const path = url.pathname
-              // Exclude auth + OTP
               if (path.includes('/auth/') || path.includes('/otp/')) return false
-              // Exclude per-person endpoints
               if (path.includes('/my/') || path.includes('/switch-member')) return false
-              return path.startsWith('/api/')
+              return true
             },
             handler: 'NetworkFirst',
             options: {
@@ -48,9 +44,7 @@ export default defineConfig({
           {
             // Scan POSTs — NetworkOnly with BackgroundSync queue
             urlPattern: ({ url, request }) =>
-              (url.origin === new URL(GOOD_API_URL).origin || url.pathname.startsWith('/api/')) &&
-              url.pathname === '/api/meal/scan' &&
-              request.method === 'POST',
+              url.pathname === '/api/meal/scan' && request.method === 'POST',
             handler: 'NetworkOnly',
             options: {
               backgroundSync: {
