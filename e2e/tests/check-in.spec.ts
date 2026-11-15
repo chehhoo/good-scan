@@ -12,7 +12,7 @@ test.describe('CheckIn', () => {
   test.beforeEach(async ({ page }) => {
     await mockSyncEndpoints(page)
     await gotoAndSync(page)
-    await page.getByText('✓ 報到 Check-In').click()
+    await page.getByText('✓ 報到').click()
   })
 
   test('successful check-in shows green banner and name', async ({ page }) => {

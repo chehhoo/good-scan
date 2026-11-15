@@ -5,7 +5,7 @@ import { TODAY } from '../fixtures/test-data'
 // Navigate to the Info tab (Tab 3)
 async function gotoInfoTab(page: Parameters<typeof gotoAndSync>[0]) {
   await gotoAndSync(page)
-  await page.getByText('📋 統計 Info').click()
+  await page.getByText('📋 統計').click()
 }
 
 test.describe('MealInfo', () => {
