@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import QrScanner from '../components/QrScanner'
 import { db, lookupByUid } from '../db/localDb'
 import { syncApi } from '../api/client'
@@ -11,10 +11,10 @@ interface CheckInResult {
   checkinTime: string   // ISO string
 }
 
-export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss }: {
+export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss, onResultChange }: {
   manualEntryEnabled: boolean; isSynced: boolean
-  /** Refresh the offline cache when a scanned person isn't in it (e.g. a just-registered walk-in) */
   onCacheMiss?: () => Promise<void>
+  onResultChange?: (hasResult: boolean) => void
 }) {
   const [scanning, setScanning] = useState(true)
   const [result, setResult] = useState<CheckInResult | null>(null)
@@ -24,6 +24,8 @@ export default function CheckIn({ manualEntryEnabled, isSynced, onCacheMiss }: {
   const [manualUid, setManualUid] = useState('')
   const [listening, setListening] = useState(false)
   const manualInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { onResultChange?.(result !== null) }, [result])
   const recognitionRef = useRef<SpeechRecognition | null>(null)
 
   const handleScan = useCallback(async (uid: string) => {

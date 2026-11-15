@@ -426,7 +426,7 @@ test.describe('INT-6 Check-In', () => {
     await loginAndSync(page)
     // Dismiss meal picker if it auto-opened (blocks tab bar on initial load)
     await selectMealIfNeeded(page)
-    await page.locator('button:has-text("✓ 報到 Check-In")').click()
+    await page.locator('button:has-text("✓ 報到")').click()
     await page.locator('input[placeholder="手動輸入 Person ID"]').fill(FAMILY_3_MEMBER_A.uid)
     await page.locator('button:has-text("查詢 Go")').click()
     // Either success (first check-in) or already checked in — both are acceptable
@@ -438,7 +438,7 @@ test.describe('INT-6 Check-In', () => {
   test('INT-6.2 — check-in unknown UID shows error', async ({ page }) => {
     await loginAndSync(page)
     await selectMealIfNeeded(page)
-    await page.locator('button:has-text("✓ 報到 Check-In")').click()
+    await page.locator('button:has-text("✓ 報到")').click()
     await page.locator('input[placeholder="手動輸入 Person ID"]').fill('uid-not-in-db')
     await page.locator('button:has-text("查詢 Go")').click()
     await expect(page.getByText(/找不到|not found|error/i)).toBeVisible({ timeout: 10_000 })
@@ -581,7 +581,7 @@ test.describe('INT-8 MealInfo live counts', () => {
 
   async function goToMealInfo(page: Page) {
     await selectMealIfNeeded(page)
-    await page.locator('button:has-text("📋 餐食 Meal Info")').click()
+    await page.locator('button:has-text("📋 統計")').click()
   }
 
   test('INT-8.1 — Tab 3 loads venues and shows at least one meal row', async ({ page }) => {

@@ -32,10 +32,10 @@ interface ScanResult {
   mealPlans: MealPlanRow[]
 }
 
-export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCacheMiss }: {
+export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCacheMiss, onResultChange }: {
   manualEntryEnabled: boolean; isSynced: boolean; onScan?: (uid: string) => void
-  /** Refresh the offline cache when a scanned person isn't in it (e.g. a just-registered walk-in) */
   onCacheMiss?: () => Promise<void>
+  onResultChange?: (hasResult: boolean) => void
 }) {
   const [scanning, setScanning] = useState(true)
   const [result, setResult] = useState<ScanResult | null>(null)
@@ -56,6 +56,8 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
   const [mealPlansExpanded, setMealPlansExpanded] = useState(false)
   const undoInfoRef = useRef<{ localId: number; clientScanId: string } | null>(null)
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => { onResultChange?.(result !== null) }, [result])
 
   // Tick the undo countdown down every second; confirm the scan when it expires
   useEffect(() => {

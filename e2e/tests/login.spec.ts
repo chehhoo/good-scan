@@ -29,7 +29,7 @@ test.describe('Login page', () => {
     await page.locator('input[type="text"]').fill('GOSPEL2026')
     await page.getByRole('button', { name: /登入/ }).click()
 
-    await page.waitForSelector('text=餐食 Meal', { timeout: 10_000 })
+    await page.waitForSelector('text=🍽 餐食', { timeout: 10_000 })
   })
 
   test('invalid access code shows error', async ({ page }) => {
@@ -51,14 +51,14 @@ test.describe('Login page', () => {
     await page.locator('input[type="text"]').fill('GOSPEL2026')
     await page.locator('input[type="text"]').press('Enter')
 
-    await page.waitForSelector('text=餐食 Meal', { timeout: 10_000 })
+    await page.waitForSelector('text=🍽 餐食', { timeout: 10_000 })
   })
 
   test('?code= in URL auto-submits', async ({ page }) => {
     await mockAll(page)
     await page.goto('/?code=GOSPEL2026')
 
-    await page.waitForSelector('text=餐食 Meal', { timeout: 10_000 })
+    await page.waitForSelector('text=🍽 餐食', { timeout: 10_000 })
   })
 
   test('empty input keeps login button disabled', async ({ page }) => {
