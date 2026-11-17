@@ -40,10 +40,17 @@ export default function App() {
   const [highContrast, setHighContrast] = useState<boolean>(
     localStorage.getItem(HIGH_CONTRAST_KEY) === '1'
   )
+  const [storageWarning, setStorageWarning] = useState(false)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', highContrast ? 'high-contrast' : 'dark')
   }, [highContrast])
+
+  useEffect(() => {
+    navigator.storage?.estimate().then(({ usage, quota }) => {
+      if (usage && quota && usage / quota > 0.8) setStorageWarning(true)
+    }).catch(() => {})
+  }, [])
 
   // Track online/offline status — re-sync cache immediately on reconnect
   useEffect(() => {
@@ -325,6 +332,14 @@ export default function App() {
             </div>
             <button onClick={() => setShowRefused(false)} className="mt-4 w-full py-2 text-sm text-blue-300 border border-blue-700 rounded-xl">關閉 Close</button>
           </div>
+        </div>
+      )}
+
+      {/* Storage quota warning */}
+      {storageWarning && (
+        <div className="flex items-center justify-between gap-2 px-4 py-2 bg-orange-900/80 border-b border-orange-700 text-orange-200 text-xs shrink-0">
+          <span>⚠ 儲存空間不足 80%，請同步後清除舊資料 Storage nearly full — sync now</span>
+          <button onClick={() => setStorageWarning(false)} className="text-orange-400 shrink-0">✕</button>
         </div>
       )}
 

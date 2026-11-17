@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import QrScanner from '../components/QrScanner'
 import { db, lookupByUid, queueScan, deleteScan, confirmScan, type CachedMeal, type CachedRegisterMeal } from '../db/localDb'
-import { playSuccess, playExceeded, playError } from '../utils/sound'
+import { playSuccess, playExceeded, playError, vibrateSuccess, vibrateExceeded, vibrateError } from '../utils/sound'
 import { prettyTime } from '../utils/time'
 
 interface PickupRecord {
@@ -56,8 +56,27 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
   const [mealPlansExpanded, setMealPlansExpanded] = useState(false)
   const undoInfoRef = useRef<{ localId: number; clientScanId: string } | null>(null)
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autoDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const swipeTouchRef = useRef<{ startX: number; startY: number } | null>(null)
 
   useEffect(() => { onResultChange?.(result !== null) }, [result])
+
+  // Auto-dismiss: 5s for error/exceeded (no undo), or once undo expires for success
+  useEffect(() => {
+    if (autoDismissRef.current) { clearTimeout(autoDismissRef.current); autoDismissRef.current = null }
+    if (!result) return
+    if (result.status === 'error' || result.status === 'exceeded') {
+      autoDismissRef.current = setTimeout(() => void reset(), 5_000)
+    }
+    return () => { if (autoDismissRef.current) clearTimeout(autoDismissRef.current) }
+  }, [result])
+
+  // Once undo expires for a successful scan, dismiss after a short pause
+  useEffect(() => {
+    if (result?.status === 'ok' && undoCountdown === null && autoDismissRef.current === null) {
+      autoDismissRef.current = setTimeout(() => void reset(), 1_500)
+    }
+  }, [undoCountdown, result])
 
   // Tick the undo countdown down every second; confirm the scan when it expires
   useEffect(() => {
@@ -89,7 +108,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
       }
 
       if (!local) {
-        playError()
+        playError(); vibrateError()
         setResult({
           name: uid, uid, mealId: 0, mealLabel: '', mealOrdered: 0, mealTaken: 0, mealRemaining: 0,
           status: 'error', errorMessage: '沒有這個註冊記錄 UID not found',
@@ -105,7 +124,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
 
       const mealId = selectedMealId ?? detectCurrentMeal(meals)
       if (!mealId) {
-        playError()
+        playError(); vibrateError()
         setResult({
           name, uid, mealId: 0, mealLabel: '', mealOrdered: 0, mealTaken: 0, mealRemaining: 0,
           status: 'error', errorMessage: '無當前餐 No active meal',
@@ -122,7 +141,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
       const taken = takenCounts[mealId] ?? 0
 
       if (ordered === 0) {
-        playError()
+        playError(); vibrateError()
         setResult({
           name, uid, mealId, mealLabel, mealOrdered: 0, mealTaken: taken, mealRemaining: 0,
           status: 'error', errorMessage: '沒有訂餐記錄 No meal order',
@@ -148,7 +167,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
         : { ...pickupsByMeal, [mealId]: [...existingPickups, { uid, name, scannedAt }] }
 
       // Show result immediately — don't block on the IndexedDB write or network.
-      if (isExceeded) playExceeded(); else playSuccess()
+      if (isExceeded) { playExceeded(); vibrateExceeded() } else { playSuccess(); vibrateSuccess() }
       setResult({
         name, uid, mealId, mealLabel,
         mealOrdered: ordered,
@@ -168,7 +187,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
         setUndoCountdown(10)
       }
     } catch (e) {
-      playError()
+      playError(); vibrateError()
       setResult({
         name: uid, uid, mealId: 0, mealLabel: '', mealOrdered: 0, mealTaken: 0, mealRemaining: 0,
         status: 'error', errorMessage: '系統問題 System error: ' + String(e),
@@ -212,6 +231,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
   }, [manualUid, handleScan])
 
   const reset = async () => {
+    if (autoDismissRef.current) { clearTimeout(autoDismissRef.current); autoDismissRef.current = null }
     // Cancel any pending undo timer
     if (undoTimerRef.current) {
       clearTimeout(undoTimerRef.current)
@@ -337,7 +357,20 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
 
       {/* ── Scan result ─────────────────────────────────────────────── */}
       {result && !loading && statusConfig && (
-        <div className="flex flex-col flex-1 min-h-0 relative">
+        <div
+          className="flex flex-col flex-1 min-h-0 relative"
+          onTouchStart={(e) => { swipeTouchRef.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY } }}
+          onTouchEnd={(e) => {
+            if (!swipeTouchRef.current) return
+            const dx = e.changedTouches[0].clientX - swipeTouchRef.current.startX
+            const dy = Math.abs(e.changedTouches[0].clientY - swipeTouchRef.current.startY)
+            swipeTouchRef.current = null
+            if (dx > 80 && dy < 60) {
+              if (autoDismissRef.current) { clearTimeout(autoDismissRef.current); autoDismissRef.current = null }
+              void reset()
+            }
+          }}
+        >
 
           {/* Scrollable result content */}
           <div className="flex-1 overflow-y-auto">
