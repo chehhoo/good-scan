@@ -184,7 +184,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
       if (!isExceeded) {
         const { id: localQueueId, clientScanId } = await queueScan(profile.uid, mealId)
         undoInfoRef.current = { localId: localQueueId, clientScanId }
-        setUndoCountdown(10)
+        setUndoCountdown(5)
       }
     } catch (e) {
       playError(); vibrateError()
