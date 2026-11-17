@@ -28,12 +28,13 @@ interface ScanResult {
   mealRemaining: number
   status: 'ok' | 'exceeded' | 'error'
   errorMessage?: string
+  collectingForHousehold?: boolean  // true when same UID picks up a 2nd+ box for household
   trackers: PickupRecord[]
   mealPlans: MealPlanRow[]
 }
 
-export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCacheMiss, onResultChange }: {
-  manualEntryEnabled: boolean; isSynced: boolean; onScan?: (uid: string) => void
+export default function MealScan({ manualEntryEnabled, familyScanMode, isSynced, onScan, onCacheMiss, onResultChange }: {
+  manualEntryEnabled: boolean; familyScanMode: boolean; isSynced: boolean; onScan?: (uid: string) => void
   onCacheMiss?: () => Promise<void>
   onResultChange?: (hasResult: boolean) => void
 }) {
@@ -118,7 +119,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
         return
       }
 
-      const { profile, registerMeals, meals: personMeals, takenCounts, pickupsByMeal } = local
+      const { profile, registerMeals, meals: personMeals, takenCounts, uidTakenCounts, pickupsByMeal } = local
       const name = profile.cnName || `${profile.firstName} ${profile.lastName}`
       onScan?.(uid)
 
@@ -139,6 +140,10 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
       const rm = registerMeals.find((r) => r.mealId === mealId)
       const ordered = rm?.qty ?? 0
       const taken = takenCounts[mealId] ?? 0
+      // Family OFF: quota is 1 per UID; Family ON: quota is household total
+      const isExceededCheck = familyScanMode
+        ? taken >= ordered
+        : (uidTakenCounts[mealId] ?? 0) >= 1
 
       if (ordered === 0) {
         playError(); vibrateError()
@@ -151,7 +156,7 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
         return
       }
 
-      const isExceeded = taken >= ordered
+      const isExceeded = isExceededCheck
       const newTaken = isExceeded ? taken : taken + 1
       const scannedAt = new Date().toISOString()
 
@@ -168,12 +173,14 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
 
       // Show result immediately — don't block on the IndexedDB write or network.
       if (isExceeded) { playExceeded(); vibrateExceeded() } else { playSuccess(); vibrateSuccess() }
+      const collectingForHousehold = familyScanMode && !isExceeded && (uidTakenCounts[mealId] ?? 0) > 0
       setResult({
         name, uid, mealId, mealLabel,
         mealOrdered: ordered,
         mealTaken: newTaken,
         mealRemaining: Math.max(0, ordered - newTaken),
         status: isExceeded ? 'exceeded' : 'ok',
+        collectingForHousehold,
         trackers,
         mealPlans: buildMealPlans(registerMeals, personMeals, updatedTakenCounts, updatedPickupsByMeal),
       })
@@ -181,10 +188,12 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
       // Queue the scan locally; the background flush sends it after the undo window closes.
       // Use profile.uid (not the raw scanned uid) so numeric-ID lookups store the
       // canonical uid — otherwise the next lookupByUid won't find this entry.
+      // setUndoCountdown must be called BEFORE the await so it batches with setResult —
+      // otherwise the auto-dismiss effect fires between the two renders.
       if (!isExceeded) {
+        setUndoCountdown(5)
         const { id: localQueueId, clientScanId } = await queueScan(profile.uid, mealId)
         undoInfoRef.current = { localId: localQueueId, clientScanId }
-        setUndoCountdown(5)
       }
     } catch (e) {
       playError(); vibrateError()
@@ -387,10 +396,15 @@ export default function MealScan({ manualEntryEnabled, isSynced, onScan, onCache
           </div>
 
           {/* Name + meal context */}
-          <div className="px-4 py-3 border-b border-blue-800 flex items-baseline gap-3">
+          <div className="px-4 py-3 border-b border-blue-800 flex items-baseline gap-3 flex-wrap">
             <span className="text-2xl font-extrabold tracking-tight leading-none">{result.name}</span>
             {result.mealLabel && (
               <span className="text-xs text-blue-400 uppercase tracking-widest font-semibold whitespace-nowrap">{result.mealLabel}</span>
+            )}
+            {result.collectingForHousehold && (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-teal-800 text-teal-200 whitespace-nowrap">
+                已為家庭領取第 {result.mealTaken} 盒 · Box {result.mealTaken} of {result.mealOrdered} for household
+              </span>
             )}
           </div>
 

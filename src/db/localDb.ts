@@ -106,10 +106,12 @@ export async function lookupByUid(uid: string) {
 
   const validEntries = allScanEntries.filter((e) => !e.refused)
   const takenCounts: Record<number, number> = {}
+  const uidTakenCounts: Record<number, number> = {}  // scans by this specific UID only
   const pickupsByMeal: Record<number, { uid: string; name: string; scannedAt: string }[]> = {}
   for (const mealId of mealIds) {
     const entries = validEntries.filter((e) => e.mealId === mealId)
     takenCounts[mealId] = entries.length
+    uidTakenCounts[mealId] = entries.filter((e) => e.uid === profile.uid).length
     pickupsByMeal[mealId] = entries.map((e) => ({
       uid: e.uid,
       name: nameByUid.get(e.uid) ?? e.uid,
@@ -117,7 +119,7 @@ export async function lookupByUid(uid: string) {
     }))
   }
 
-  return { profile, registerMeals, meals, takenCounts, pickupsByMeal }
+  return { profile, registerMeals, meals, takenCounts, uidTakenCounts, pickupsByMeal }
 }
 
 export async function queueScan(uid: string, mealId: number): Promise<{ id: number; clientScanId: string }> {

@@ -31,9 +31,14 @@ export default function App() {
   const warmingUp = useRef(false)
   const warmUpInFlight = useRef<Promise<void> | null>(null)
   const lastMissRefreshAt = useRef(0)
-  // Manual entry: always on in dev; toggle by tapping version badge 5× in prod
+  // familyScanMode: any household member may collect for the whole family (up to household qty).
+  // Fetched from good-api event-info; defaults to true for backwards compatibility.
+  const [familyScanMode, setFamilyScanMode] = useState<boolean>(
+    localStorage.getItem('familyScanMode') !== '0'
+  )
+  // Manual entry: toggle by tapping version badge 5× in both dev and prod
   const [manualEntryEnabled, setManualEntryEnabled] = useState<boolean>(
-    import.meta.env.DEV || localStorage.getItem(MANUAL_ENTRY_KEY) === '1'
+    localStorage.getItem(MANUAL_ENTRY_KEY) === '1'
   )
   const versionTapCount = useRef(0)
   const versionTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -107,6 +112,10 @@ export default function App() {
     eventApi.getActive().then((event) => {
       setOnline(true)
       setActiveEvent(event)
+      // Sync familyScanMode from server; absent field defaults to true
+      const fsm = event.familyScanMode !== false
+      setFamilyScanMode(fsm)
+      localStorage.setItem('familyScanMode', fsm ? '1' : '0')
       // If the active event has changed since login, force re-login with the new code
       const tokenEventId = localStorage.getItem('tokenEventId')
       if (tokenEventId && String(event.id) !== tokenEventId) {
@@ -365,7 +374,7 @@ export default function App() {
 
       {/* Page content */}
       <main className="flex-1 overflow-y-auto">
-        {tab === 'meal' && <MealScan manualEntryEnabled={manualEntryEnabled} isSynced={lastSyncAt !== null && Date.now() - lastSyncAt.getTime() <= 30 * 60 * 1000} onCacheMiss={refreshOnCacheMiss} onResultChange={setIsScanning} />}
+        {tab === 'meal' && <MealScan manualEntryEnabled={manualEntryEnabled} familyScanMode={familyScanMode} isSynced={lastSyncAt !== null && Date.now() - lastSyncAt.getTime() <= 30 * 60 * 1000} onCacheMiss={refreshOnCacheMiss} onResultChange={setIsScanning} />}
         {tab === 'checkin' && <CheckIn manualEntryEnabled={manualEntryEnabled} isSynced={lastSyncAt !== null && Date.now() - lastSyncAt.getTime() <= 30 * 60 * 1000} onCacheMiss={refreshOnCacheMiss} onResultChange={setIsScanning} />}
         {tab === 'info' && <MealInfo refreshKey={infoRefreshKey} onSync={warmUpCache} />}
         {tab === 'history' && <ScanHistory />}
