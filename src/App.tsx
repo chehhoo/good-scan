@@ -31,19 +31,31 @@ export default function App() {
   const warmingUp = useRef(false)
   const warmUpInFlight = useRef<Promise<void> | null>(null)
   const lastMissRefreshAt = useRef(0)
-  // Manual entry: always on in dev; toggle by tapping version badge 5× in prod
+  // familyScanMode: any household member may collect for the whole family (up to household qty).
+  // Fetched from good-api event-info; defaults to true for backwards compatibility.
+  const [familyScanMode, setFamilyScanMode] = useState<boolean>(
+    localStorage.getItem('familyScanMode') !== '0'
+  )
+  // Manual entry: toggle by tapping version badge 5× in both dev and prod
   const [manualEntryEnabled, setManualEntryEnabled] = useState<boolean>(
-    import.meta.env.DEV || localStorage.getItem(MANUAL_ENTRY_KEY) === '1'
+    localStorage.getItem(MANUAL_ENTRY_KEY) === '1'
   )
   const versionTapCount = useRef(0)
   const versionTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [highContrast, setHighContrast] = useState<boolean>(
     localStorage.getItem(HIGH_CONTRAST_KEY) === '1'
   )
+  const [storageWarning, setStorageWarning] = useState(false)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', highContrast ? 'high-contrast' : 'dark')
   }, [highContrast])
+
+  useEffect(() => {
+    navigator.storage?.estimate().then(({ usage, quota }) => {
+      if (usage && quota && usage / quota > 0.8) setStorageWarning(true)
+    }).catch(() => {})
+  }, [])
 
   // Track online/offline status — re-sync cache immediately on reconnect
   useEffect(() => {
@@ -100,6 +112,10 @@ export default function App() {
     eventApi.getActive().then((event) => {
       setOnline(true)
       setActiveEvent(event)
+      // Sync familyScanMode from server; absent field defaults to true
+      const fsm = event.familyScanMode !== false
+      setFamilyScanMode(fsm)
+      localStorage.setItem('familyScanMode', fsm ? '1' : '0')
       // If the active event has changed since login, force re-login with the new code
       const tokenEventId = localStorage.getItem('tokenEventId')
       if (tokenEventId && String(event.id) !== tokenEventId) {
@@ -328,6 +344,14 @@ export default function App() {
         </div>
       )}
 
+      {/* Storage quota warning */}
+      {storageWarning && (
+        <div className="flex items-center justify-between gap-2 px-4 py-2 bg-orange-900/80 border-b border-orange-700 text-orange-200 text-xs shrink-0">
+          <span>⚠ 儲存空間不足 80%，請同步後清除舊資料 Storage nearly full — sync now</span>
+          <button onClick={() => setStorageWarning(false)} className="text-orange-400 shrink-0">✕</button>
+        </div>
+      )}
+
       {/* Top tab bar */}
       <nav className="flex bg-blue-900 border-b border-blue-700 shrink-0">
         {(['meal', 'checkin', 'info', 'history'] as Tab[]).map((t) => (
@@ -350,7 +374,7 @@ export default function App() {
 
       {/* Page content */}
       <main className="flex-1 overflow-y-auto">
-        {tab === 'meal' && <MealScan manualEntryEnabled={manualEntryEnabled} isSynced={lastSyncAt !== null && Date.now() - lastSyncAt.getTime() <= 30 * 60 * 1000} onCacheMiss={refreshOnCacheMiss} onResultChange={setIsScanning} />}
+        {tab === 'meal' && <MealScan manualEntryEnabled={manualEntryEnabled} familyScanMode={familyScanMode} isSynced={lastSyncAt !== null && Date.now() - lastSyncAt.getTime() <= 30 * 60 * 1000} onCacheMiss={refreshOnCacheMiss} onResultChange={setIsScanning} />}
         {tab === 'checkin' && <CheckIn manualEntryEnabled={manualEntryEnabled} isSynced={lastSyncAt !== null && Date.now() - lastSyncAt.getTime() <= 30 * 60 * 1000} onCacheMiss={refreshOnCacheMiss} onResultChange={setIsScanning} />}
         {tab === 'info' && <MealInfo refreshKey={infoRefreshKey} onSync={warmUpCache} />}
         {tab === 'history' && <ScanHistory />}

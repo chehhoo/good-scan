@@ -43,6 +43,7 @@ export interface ActiveEvent {
   id: number
   name: string
   nameEng: string | null
+  familyScanMode?: boolean  // absent = default true (backwards compat with older API)
 }
 
 export const eventApi = {

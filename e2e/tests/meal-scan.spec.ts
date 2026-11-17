@@ -78,14 +78,14 @@ test.describe('MealScan', () => {
     await page.locator('button:has-text("查詢 Go")').click()
     await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
 
-    // Undo button should appear with countdown starting at 10
+    // Undo button should appear with countdown starting at 5
     const undoButton = page.locator('button:has-text("撤銷 Undo")')
     await expect(undoButton).toBeVisible()
-    await expect(undoButton).toContainText('10s')
+    await expect(undoButton).toContainText('5s')
 
     // Wait a second and check countdown decreased
     await page.waitForTimeout(1100)
-    await expect(undoButton).toContainText('9s')
+    await expect(undoButton).toContainText('4s')
   })
 
   test('"Scan Next" during undo window cancels timer and commits scan', async ({ page }) => {
@@ -96,7 +96,7 @@ test.describe('MealScan', () => {
     // Undo button appears
     const undoButton = page.locator('button:has-text("撤銷 Undo")')
     await expect(undoButton).toBeVisible()
-    await expect(undoButton).toContainText('10s')
+    await expect(undoButton).toContainText('5s')
 
     // Immediately press Scan Next before timer expires
     await page.locator('button:has-text("掃描下一位")').click()
@@ -115,13 +115,12 @@ test.describe('MealScan', () => {
     const undoButton = page.locator('button:has-text("撤銷 Undo")')
     await expect(undoButton).toBeVisible()
 
-    // Wait for timer to expire (10 seconds + buffer)
-    await page.waitForTimeout(11_000)
+    // Wait for undo timer + auto-dismiss (5s undo + 1.5s dismiss + buffer)
+    await page.waitForTimeout(8_000)
 
-    // Undo button should disappear after timer expires
+    // Undo button gone and panel auto-dismissed — scanner input should be back
     await expect(undoButton).not.toBeVisible()
-    // Result should still be visible (only the undo button leaves)
-    await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
+    await expect(page.locator('input[placeholder="手動輸入 Person ID"]')).toBeVisible()
   })
 
   test('rapid "Scan Next" presses don\'t cause issues', async ({ page }) => {

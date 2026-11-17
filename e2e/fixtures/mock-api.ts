@@ -51,8 +51,13 @@ export async function mockSyncEndpoints(
 /**
  * Navigates to the app and waits for warmUpCache to complete (status dot
  * turns green, indicating a successful sync).
+ * Injects manualEntry=1 so the manual-entry input is visible in tests
+ * (manual entry is off by default in both dev and prod; tests need it on).
  */
 export async function gotoAndSync(page: Page) {
+  await page.addInitScript(() => {
+    localStorage.setItem('manualEntryEnabled', '1')
+  })
   await page.goto('/')
   await page.waitForSelector('text=在線 Online', { timeout: 15_000 })
 }

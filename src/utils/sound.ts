@@ -52,3 +52,17 @@ export function playError(): void {
     [180, 0.30, 'square', 0.20, 0],
   ])
 }
+
+// ── Haptic feedback ──────────────────────────────────────────────────────────
+
+export function vibrateSuccess(): void {
+  navigator.vibrate?.(50)
+}
+
+export function vibrateExceeded(): void {
+  navigator.vibrate?.([60, 40, 60])
+}
+
+export function vibrateError(): void {
+  navigator.vibrate?.([100, 50, 100])
+}

@@ -10,6 +10,24 @@ interface EnrichedScan {
 
 const MEAL_TYPE: Record<number, string> = { 1: '早餐', 2: '午餐', 3: '晚餐' }
 
+function exportCsv(items: EnrichedScan[]) {
+  const rows = [['Name', 'UID', 'Meal', 'ScannedAt', 'Status', 'RefusedReason']]
+  for (const { scan, profile, meal } of items) {
+    const name = profile ? (profile.cnName || `${profile.firstName} ${profile.lastName}`) : scan.uid
+    const mealLabel = meal ? `${MEAL_TYPE[meal.type] ?? ''} ${meal.date}` : `#${scan.mealId}`
+    const status = scan.refused ? 'refused' : scan.synced ? 'synced' : 'pending'
+    rows.push([name, scan.uid, mealLabel, scan.scannedAt, status, scan.refused ?? ''])
+  }
+  const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `scan-history-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function ScanHistory() {
   const [items, setItems] = useState<EnrichedScan[]>([])
   const [loading, setLoading] = useState(true)
@@ -48,7 +66,17 @@ export default function ScanHistory() {
     <div className="p-4 flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-blue-300">掃描記錄 Scan History</p>
-        <button onClick={load} className="bg-blue-700 hover:bg-blue-600 rounded-lg px-3 py-1.5 text-xs font-medium">↻ 刷新</button>
+        <div className="flex gap-2">
+          {items.length > 0 && (
+            <button
+              onClick={() => exportCsv(items)}
+              className="bg-blue-800 hover:bg-blue-700 rounded-lg px-3 py-1.5 text-xs font-medium"
+            >
+              ↓ CSV
+            </button>
+          )}
+          <button onClick={load} className="bg-blue-700 hover:bg-blue-600 rounded-lg px-3 py-1.5 text-xs font-medium">↻ 刷新</button>
+        </div>
       </div>
 
       {/* Filter tabs */}
