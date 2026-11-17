@@ -115,13 +115,12 @@ test.describe('MealScan', () => {
     const undoButton = page.locator('button:has-text("撤銷 Undo")')
     await expect(undoButton).toBeVisible()
 
-    // Wait for timer to expire (10 seconds + buffer)
-    await page.waitForTimeout(11_000)
+    // Wait for undo timer + auto-dismiss (10s undo + 1.5s dismiss + buffer)
+    await page.waitForTimeout(13_000)
 
-    // Undo button should disappear after timer expires
+    // Undo button gone and panel auto-dismissed — scanner input should be back
     await expect(undoButton).not.toBeVisible()
-    // Result should still be visible (only the undo button leaves)
-    await expect(page.getByText('成功！請拿飯盒')).toBeVisible()
+    await expect(page.locator('input[placeholder="手動輸入 Person ID"]')).toBeVisible()
   })
 
   test('rapid "Scan Next" presses don\'t cause issues', async ({ page }) => {
