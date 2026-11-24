@@ -95,7 +95,7 @@ jobs:
     environment: production
     permissions:
       id-token: write
-      contents: read
+      contents: write               # needed to create GitHub Release
 
     steps:
       - name: Download dist artifact
@@ -132,6 +132,16 @@ jobs:
           done
           echo "::error::Health check failed after 5 attempts — last HTTP $STATUS"
           exit 1
+
+      - uses: actions/checkout@v5
+
+      - name: Create GitHub Release
+        run: |
+          gh release create ${{ github.ref_name }} \
+            --generate-notes \
+            --title "${{ github.ref_name }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Deployment summary
         run: |
